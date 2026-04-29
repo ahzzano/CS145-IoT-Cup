@@ -7,6 +7,10 @@ from flask_restx import Api, Resource
 from flask_migrate import Migrate
 
 from models.base import db
+import models.examinee
+import models.exam_kit
+import models.examinee_picture
+import models.logs
 
 app = Flask(__name__)
 
@@ -24,11 +28,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 db.init_app(app)
 api = Api(app)
 migrate = Migrate(app, db)
-
-import models.examinee
-import models.exam_kit
-import models.examinee_picture
-import models.logs
 
 def init_database():
     with app.app_context():
