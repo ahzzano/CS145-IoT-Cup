@@ -3,6 +3,20 @@ revision = 3
 requires-python = ">=3.13"
 
 [[package]]
+name = "alembic"
+version = "1.18.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mako" },
+    { name = "sqlalchemy" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/94/13/8b084e0f2efb0275a1d534838844926f798bd766566b1375174e2448cd31/alembic-1.18.4.tar.gz", hash = "sha256:cb6e1fd84b6174ab8dbb2329f86d631ba9559dd78df550b57804d607672cedbc", size = 2056725, upload-time = "2026-02-10T16:00:47.195Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d2/29/6533c317b74f707ea28f8d633734dbda2119bbadfc61b2f3640ba835d0f7/alembic-1.18.4-py3-none-any.whl", hash = "sha256:a5ed4adcf6d8a4cb575f3d759f071b03cd6e5c7618eb796cb52497be25bfe19a", size = 263893, upload-time = "2026-02-10T16:00:49.997Z" },
+]
+
+[[package]]
 name = "aniso8601"
 version = "10.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -35,6 +49,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "flask" },
+    { name = "flask-migrate" },
     { name = "flask-restx" },
     { name = "flask-sqlalchemy" },
     { name = "mosip-auth-sdk" },
@@ -46,6 +61,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "flask", specifier = ">=3.1.3" },
+    { name = "flask-migrate", specifier = ">=4.1.0" },
     { name = "flask-restx", specifier = ">=1.3.2" },
     { name = "flask-sqlalchemy", specifier = ">=3.1.1" },
     { name = "mosip-auth-sdk", git = "https://github.com/mosip/ida-auth-sdk.git?rev=f322c59868123c2ef9410b5a3fecfd5dcdfd56af" },
@@ -242,6 +258,20 @@ wheels = [
 ]
 
 [[package]]
+name = "flask-migrate"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "alembic" },
+    { name = "flask" },
+    { name = "flask-sqlalchemy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/8e/47c7b3c93855ceffc2eabfa271782332942443321a07de193e4198f920cf/flask_migrate-4.1.0.tar.gz", hash = "sha256:1a336b06eb2c3ace005f5f2ded8641d534c18798d64061f6ff11f79e1434126d", size = 21965, upload-time = "2025-01-10T18:51:11.848Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d2/c4/3f329b23d769fe7628a5fc57ad36956f1fb7132cf8837be6da762b197327/Flask_Migrate-4.1.0-py3-none-any.whl", hash = "sha256:24d8051af161782e0743af1b04a152d007bad9772b2bca67b7ec1e8ceeb3910d", size = 21237, upload-time = "2025-01-10T18:51:09.527Z" },
+]
+
+[[package]]
 name = "flask-restx"
 version = "1.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -379,6 +409,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8c/90/f065668004d22715c1940d6e88e4c3afc8ee16d5664e4478d2c8fd23a250/jwcrypto-1.5.7.tar.gz", hash = "sha256:70204d7cca406eda8c82352e3c41ba2d946610dafd19e54403f0a1f4f18633c6", size = 89535, upload-time = "2026-04-07T00:35:36.116Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/72/24/fb7da4d6613de7001feaf540d4b5969c6b5a1c42839043b0196cb13aa057/jwcrypto-1.5.7-py3-none-any.whl", hash = "sha256:729463fefe28b6de5cf1ebfda3e94f1a1b41d2799148ef98a01cb9678ebe2bb0", size = 94799, upload-time = "2026-04-07T00:35:35.085Z" },
+]
+
+[[package]]
+name = "mako"
+version = "1.3.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markupsafe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/62/791b31e69ae182791ec67f04850f2f062716bbd205483d63a215f3e062d3/mako-1.3.12.tar.gz", hash = "sha256:9f778e93289bd410bb35daadeb4fc66d95a746f0b75777b942088b7fd7af550a", size = 400219, upload-time = "2026-04-28T19:01:08.512Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/b1/a0ec7a5a9db730a08daef1fdfb8090435b82465abbf758a596f0ea88727e/mako-1.3.12-py3-none-any.whl", hash = "sha256:8f61569480282dbf557145ce441e4ba888be453c30989f879f0d652e39f53ea9", size = 78521, upload-time = "2026-04-28T19:01:10.393Z" },
 ]
 
 [[package]]

@@ -4,6 +4,7 @@ load_dotenv()
 
 from flask import Flask
 from flask_restx import Api, Resource
+from flask_migrate import Migrate
 
 from models.base import db
 
@@ -22,8 +23,11 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 
 db.init_app(app)
 api = Api(app)
+migrate = Migrate(app, db)
 
 def init_database():
+    import models.examinee
+
     with app.app_context():
         db.create_all()
 
