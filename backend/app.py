@@ -1,13 +1,7 @@
 import os
 from dotenv import load_dotenv
-from flask_restx.errors import HTTPException, HTTPStatus, ValidationError
-from sqlalchemy import select
-import werkzeug
-from werkzeug.datastructures import FileStorage
 load_dotenv()
 
-from flask import Flask, jsonify, request
-from flask_restx import Api, Resource, abort, reqparse
 from flask_migrate import Migrate
 
 from models.base import db
