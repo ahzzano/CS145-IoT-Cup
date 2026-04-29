@@ -8,7 +8,7 @@ from flask_restx import Namespace, Resource, abort, reqparse
 
 from models.examinee import *
 
-api = Namespace("examinee")
+api = Namespace("examinee", description='All API endpoints for Examinees')
 
 examinee_parser = reqparse.RequestParser()
 examinee_parser.add_argument('id', type=int, help='id of the user', location='args')
