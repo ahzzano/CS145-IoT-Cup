@@ -4,4 +4,19 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "flask>=3.1.3",
+    "flask-migrate>=4.1.0",
+    "flask-restx>=1.3.2",
+    "flask-sqlalchemy>=3.1.1",
+    "mosip-auth-sdk",
+    "psycopg>=3.3.3",
+    "psycopg-binary>=3.3.3",
+    "python-dotenv>=1.2.2",
+]
+
+[tool.uv.sources]
+mosip-auth-sdk = {
+    git = "https://github.com/mosip/ida-auth-sdk.git",
+    rev = "f322c59868123c2ef9410b5a3fecfd5dcdfd56af"
+}
