@@ -1,0 +1,13 @@
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/.env
+frontend/build/
+frontend/.output/
+frontend/hamdi_context.md/
