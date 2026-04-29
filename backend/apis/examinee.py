@@ -87,3 +87,22 @@ class GetExaminee(Resource):
         db.session.commit()
 
         return {"status": "deleted user"}, 200
+
+logtime_args = reqparse.RequestParser()
+logtime_args.add_argument('entry_picture', location='files', type=FileStorage, required=True)
+logtime_args.add_argument('examinee_id', location='form', type=int, required=True)
+logtime_args.add_argument('examkit_id', type=int,location='form', required=True)
+
+@api.route('/timein')
+class LogTimeIn(Resource):
+    @api.expect(logtime_args)
+    def post(self):
+        args = logtime_args.parse_args()
+        return {}, 200
+
+@api.route('/timeout')
+class LogTimeIn(Resource):
+    @api.expect(logtime_args)
+    def post(self):
+        args = logtime_args.parse_args()
+        return {}, 200

@@ -6,7 +6,7 @@ from flask_restx import Namespace, Resource, fields, reqparse
 from models.exam_kit import ExamKit
 from models.examinee import *
 
-api = Namespace('exam')
+api = Namespace('exam', description='All exam related requests')
 
 link_exam =  reqparse.RequestParser()
 link_exam.add_argument('examinee', location='form', type=int, required=True)
