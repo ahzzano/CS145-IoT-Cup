@@ -29,6 +29,8 @@ dependencies = [
     "typing-extensions==4.15.0",
     "typing-inspection==0.4.2",
     "urllib3==2.5.0",
+    "deepface>=0.0.93",
+    "tf-keras>=2.18.0",
 ]
 
 [tool.uv.sources]
