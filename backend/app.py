@@ -1,16 +1,18 @@
 import os
 from dotenv import load_dotenv
+from flask_restx.errors import HTTPException, HTTPStatus, ValidationError
+from sqlalchemy import select
 load_dotenv()
 
-from flask import Flask
-from flask_restx import Api, Resource
+from flask import Flask, jsonify
+from flask_restx import Api, Resource, abort, reqparse
 from flask_migrate import Migrate
 
 from models.base import db
-import models.examinee
-import models.exam_kit
-import models.examinee_picture
-import models.logs
+from models.examinee import *
+from models.exam_kit import *
+from models.examinee_picture import *
+from models.logs import *
 
 app = Flask(__name__)
 
@@ -29,13 +31,26 @@ db.init_app(app)
 api = Api(app)
 migrate = Migrate(app, db)
 
-def init_database():
-    with app.app_context():
-        db.create_all()
-        migrate.init_app(app, db)
+examinee_parser = reqparse.RequestParser()
+examinee_parser.add_argument('id', type=int, help='id of the user', location='args')
+
+@api.route('/examinee')
+class GetExaminee(Resource):
+    @api.expect(examinee_parser)
+    def get(self):
+        args = examinee_parser.parse_args()
+
+        id = args.get('id')
+        if id is None:
+            abort(HTTPStatus.BAD_REQUEST, "Missing ID Parameter")
+
+        user = db.session.execute(select(Examinee).filter_by(id=id)).first()
+        if user is None:
+            abort(HTTPStatus.NOT_FOUND, "User does not exist")
+
+        return jsonify(user)
 
 def main():
-    init_database()
     app.run(debug=True)
 
 if __name__ == "__main__":
