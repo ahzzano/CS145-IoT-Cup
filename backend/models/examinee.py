@@ -1,4 +1,4 @@
-from sqlalchemy import LargeBinary
+from sqlalchemy import LargeBinary, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from models.base import db
 

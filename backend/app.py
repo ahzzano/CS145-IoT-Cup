@@ -23,12 +23,14 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 
 db.init_app(app)
 api = Api(app)
-migrate = Migrate(app, db, command='migrate')
+migrate = Migrate(app, db)
+
+import models.examinee
+import models.exam_kit
+import models.examinee_picture
+import models.logs
 
 def init_database():
-    import models.examinee
-    import models.exam_kit
-
     with app.app_context():
         db.create_all()
         migrate.init_app(app, db)
