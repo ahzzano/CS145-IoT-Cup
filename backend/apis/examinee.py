@@ -1,11 +1,12 @@
 import os
-from dotenv import load_dotenv
+
+from flask import current_app
 from flask_restx.errors import HTTPStatus
 from werkzeug.datastructures import FileStorage
-load_dotenv()
 
 from flask_restx import Namespace, Resource, abort, reqparse
 
+from models.exam_kit import ExamKit
 from models.examinee import *
 
 api = Namespace("examinee", description='All API endpoints for Examinees')
@@ -27,10 +28,12 @@ class GetExaminee(Resource):
 
         id = args.get('id')
         if id is None:
-            abort(HTTPStatus.BAD_REQUEST, "Missing ID Parameter")
+            return {"errror": "missing ID Parameter"}, 400
 
-        user = db.get_or_404(Examinee, id)
-        return user.to_dict()
+        user = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
+        if user is None:
+            return {"error": "examinee does not exist"}, 400
+        return user[0].to_dict()
     
     @api.expect(examinee_parser_creator)
     def post(self):
@@ -44,7 +47,7 @@ class GetExaminee(Resource):
             return {"error": "no name provided"}, 400
         
         filename = file.filename
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
 
         examinee = Examinee(name, filename)
         if args.get('id'):
@@ -54,9 +57,13 @@ class GetExaminee(Resource):
         examinee.picture = filename
 
         db.session.add(examinee)
+
+        ek = ExamKit(False, None)
+        db.session.add(ek)
+
         db.session.commit()
 
-        return {"status": "new user created"}, 200
+        return {"status": "new user created", 'examinee_id': examinee.id}, 200
     
     @api.expect(examinee_parser)
     def delete(self):
@@ -65,8 +72,18 @@ class GetExaminee(Resource):
         if id is None:
             abort(HTTPStatus.BAD_REQUEST, "Missing ID Parameter")
 
-        examinee = db.get_or_404(Examinee, id)
-        db.session.delete(examinee)
+        examinee = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
+        db.session.commit()
+
+        if examinee is None:
+            return {"error": "examinee does not exist"}, 400
+        
+        picture_file = examinee[0].picture
+        pic_path = os.path.join(current_app.config['UPLOAD_FOLDER'], picture_file)
+        if os.path.exists(pic_path):
+            os.remove(pic_path)
+
+        db.session.delete(examinee[0])
         db.session.commit()
 
         return {"status": "deleted user"}, 200

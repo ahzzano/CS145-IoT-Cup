@@ -1,5 +1,6 @@
 from flask_restx import Api
 from .examinee import api as examinee_api
+from .exam import api as exam_api
 
 api = Api(
         title='Mock LERIS API',
@@ -7,5 +8,5 @@ api = Api(
     )
 
 api.add_namespace(examinee_api)
-
+api.add_namespace(exam_api)
 
