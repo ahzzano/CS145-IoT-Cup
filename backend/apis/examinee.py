@@ -87,8 +87,12 @@ class GetExaminee(Resource):
             os.remove(pic_path)
 
         db.session.delete(examinee[0])
-        db.session.commit()
 
+        ek = db.session.query(ExamKit).order_by(ExamKit.kit_id.desc()).first()
+        if not ek is None:
+            db.session.delete(ek)
+
+        db.session.commit()
         return {"status": "deleted user"}, 200
 
 logtime_args = reqparse.RequestParser()

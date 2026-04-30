@@ -16,17 +16,16 @@ class LogEntry(db.Model):
 event types:
     examinee:
         examinee.created 
-        examinee.deleted
     examkit:
         examkit.linked
         examkit.unlinked
         examkit.submitted
 """
 class EventLog(db.Model):
-    log_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
-    examinee: Mapped[int] = mapped_column(ForeignKey("examinee.id"), nullable=True, init=False)
-    exam_kit: Mapped[int] = mapped_column(ForeignKey('exam_kit.kit_id'), nullable=True, init=False)
     event_type: Mapped[str]
+    log_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
+    examinee: Mapped[int] = mapped_column(ForeignKey("examinee.id", ondelete='CASCADE'), nullable=True, default=None)
+    exam_kit: Mapped[int] = mapped_column(ForeignKey('exam_kit.kit_id', ondelete='CASCADE'), nullable=True, default=None) 
     message: Mapped[str] = mapped_column(default="")
     timestamp: Mapped[datetime] = mapped_column(onupdate=func.now(), default=func.now())
 
