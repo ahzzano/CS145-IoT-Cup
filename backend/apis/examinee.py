@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 
 from flask import current_app
@@ -102,10 +103,7 @@ class GetExaminee(Resource):
         return {"status": "deleted user"}, 200
 
 logtime_args = reqparse.RequestParser()
-logtime_args.add_argument('entry_picture', location='files', type=FileStorage, required=True)
 logtime_args.add_argument('examinee_id', location='form', type=int, required=True)
-logtime_args.add_argument('exam_kit_id', type=int,location='form', required=True)
-
 @api.route('/timein')
 class LogTimeIn(Resource):
     @api.expect(logtime_args)
@@ -113,15 +111,55 @@ class LogTimeIn(Resource):
         args = logtime_args.parse_args()
 
         examinee_id = args.get('examinee_id')
-        exam_kit_id = args.get('exam_kit_id')
 
-        return {}, 200
+        examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
+        db.session.commit()
 
+        if examinee is None:
+            return {"error": "examinee does not exist"}, 404
+        
+        log_entry = db.session.query(LogEntry).filter_by(examinee=examinee_id).order_by(LogEntry.log_id.desc()).first()
+
+        if log_entry:
+            log_entry.exam_time_in = datetime.now()
+
+        db.session.commit()
+
+        return {'status': 'examinee has timed in'}, 200
+
+timeout_args = reqparse.RequestParser()
+timeout_args.add_argument('examinee_id', location='form', type=int, required=True)
+timeout_args.add_argument('exam_kit_id', type=int,location='form', required=True)
 @api.route('/timeout')
-class LogTimeIn(Resource):
-    @api.expect(logtime_args)
+class LogTimeOut(Resource):
+    @api.expect(timeout_args)
     def post(self):
-        args = logtime_args.parse_args()
+        args = timeout_args.parse_args()
+
         examinee_id = args.get('examinee_id')
         exam_kit_id = args.get('exam_kit_id')
-        return {}, 200
+
+        examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
+        exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_kit_id)).first()
+        db.session.commit()
+
+        if examinee is None:
+            return {"error": "examinee does not exist"}, 404
+        
+        if exam_kit is None:
+            return {"error": "exam kit does not exist"}, 404
+
+        if examinee[0].id != exam_kit[0].examinee_id:
+            return {"error": "exam kit examinee does not match"}, 400
+        
+        log_entry = db.session.query(LogEntry).filter_by(examinee=examinee_id).order_by(LogEntry.log_id.desc()).first()
+
+        if log_entry:
+            if log_entry.exam_time_in is None:
+                return {"error": "examinee has not timed in"}, 400
+
+            log_entry.exam_time_out = datetime.now()
+
+        db.session.commit()
+
+        return {'status': 'examinee has timed out'}, 200
