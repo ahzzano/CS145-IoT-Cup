@@ -1,3 +1,6 @@
 __pycache__/
 serve/
 .env
+mosip_keys/
+mosip_config.toml
+authenticator.log
