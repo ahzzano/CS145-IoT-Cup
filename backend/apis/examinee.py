@@ -6,6 +6,7 @@ from werkzeug.datastructures import FileStorage
 
 from flask_restx import Namespace, Resource, abort, reqparse
 
+from logs import on_examinee_creation
 from models.exam_kit import ExamKit
 from models.examinee import *
 
@@ -60,6 +61,8 @@ class GetExaminee(Resource):
 
         ek = ExamKit(False, None)
         db.session.add(ek)
+
+        on_examinee_creation(examinee)
 
         db.session.commit()
 

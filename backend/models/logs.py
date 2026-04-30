@@ -12,10 +12,21 @@ class LogEntry(db.Model):
     exam_time_in: Mapped[datetime] = mapped_column(onupdate=func.now())
     exam_time_out: Mapped[datetime] = mapped_column(onupdate=func.now())
 
+"""
+event types:
+    examinee:
+        examinee.created 
+        examinee.deleted
+    examkit:
+        examkit.linked
+        examkit.unlinked
+        examkit.submitted
+"""
 class EventLog(db.Model):
     log_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
-    examinee: Mapped[int] = mapped_column(ForeignKey("examinee.id"), nullable=True)
-    exam_kit: Mapped[int] = mapped_column(ForeignKey('exam_kit.kit_id'))
+    examinee: Mapped[int] = mapped_column(ForeignKey("examinee.id"), nullable=True, init=False)
+    exam_kit: Mapped[int] = mapped_column(ForeignKey('exam_kit.kit_id'), nullable=True, init=False)
     event_type: Mapped[str]
-    timestamp: Mapped[datetime] = mapped_column(onupdate=func.now())
+    message: Mapped[str] = mapped_column(default="")
+    timestamp: Mapped[datetime] = mapped_column(onupdate=func.now(), default=func.now())
 
