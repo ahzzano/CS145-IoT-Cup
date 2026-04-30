@@ -13,6 +13,8 @@ from models.exam_kit import ExamKit
 from models.examinee import *
 from models.logs import LogEntry
 
+import utils
+
 api = Namespace("examinee", description='All API endpoints for Examinees')
 
 examinee_parser = reqparse.RequestParser()
@@ -37,7 +39,7 @@ class GetExaminee(Resource):
         user = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
         if user is None:
             return {"error": "examinee does not exist"}, 404
-        return user[0].to_dict()
+        return utils.gen_success_message("returned examinee", user[0].to_dict())
     
     @api.expect(examinee_parser_creator)
     def post(self):
@@ -73,7 +75,7 @@ class GetExaminee(Resource):
 
         db.session.commit()
 
-        return {"status": "new user created", 'examinee_id': examinee.id}, 200
+        return utils.gen_success_message("new user created", examinee.to_dict())
     
     @api.expect(examinee_parser)
     def delete(self):
@@ -100,7 +102,7 @@ class GetExaminee(Resource):
             db.session.delete(ek)
 
         db.session.commit()
-        return {"status": "deleted user"}, 200
+        return utils.gen_success_message("deleted user", None)
 
 logtime_args = reqparse.RequestParser()
 logtime_args.add_argument('examinee_id', location='form', type=int, required=True)
@@ -125,7 +127,7 @@ class LogTimeIn(Resource):
 
         db.session.commit()
 
-        return {'status': 'examinee has timed in'}, 200
+        return utils.gen_success_message("examinee has timed in", 200)
 
 timeout_args = reqparse.RequestParser()
 timeout_args.add_argument('examinee_id', location='form', type=int, required=True)
@@ -162,4 +164,4 @@ class LogTimeOut(Resource):
 
         db.session.commit()
 
-        return {'status': 'examinee has timed out'}, 200
+        return utils.gen_success_message("examinee has timed out", 200)
