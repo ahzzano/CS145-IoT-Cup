@@ -1,6 +1,6 @@
 import base64
 import os
- 
+import json
 import cv2
 import numpy as np
 from dynaconf import Dynaconf
@@ -8,41 +8,69 @@ from flask import current_app
 from flask_restx import Namespace, Resource, reqparse
 from mosip_auth_sdk import MOSIPAuthenticator
 from mosip_auth_sdk.models import DemographicsModel
- 
+from werkzeug.datastructures import FileStorage
 from models.examinee import Examinee
 from models.base import db
 import utils
 
-api = Namespace("mosip", description='all MOSIP related requests')
+api = Namespace("mosip", description="All MOSIP related requests")
 
 config = Dynaconf(settings_files=["./mosip_config.toml"], environments=False)
 authenticator = MOSIPAuthenticator(config=config)
 
 PHOTO_DIR = "serve/" # change this to where photos will be saved
 
+# ── Shared helper ───
+def read_qr(file: FileStorage) -> str | None:
+    """Decode a QR code from an uploaded image. Returns the raw string or None."""
+    img_bytes = np.frombuffer(file.read(), dtype=np.uint8)
+    img = cv2.imdecode(img_bytes, cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    data, _, _ = cv2.QRCodeDetector().detectAndDecode(img)
+    return data if data else None
+
+def parse_national_id_qr(qr_data: str) -> tuple[str, str] | tuple[None, None]:
+    """
+    Parse the decoded QR string from a Philippine National ID.
+    Returns (uin, name) or (None, None) if parsing fails.
+    """
+    try:
+        payload = json.loads(qr_data)
+        uin  = payload["uin"]
+        name = payload["name"]
+        return uin, name
+    except (IndexError, AttributeError):
+        return None, None
+
 # ── Parsers ──
-auth_parser = reqparse.RequestParser()
-auth_parser.add_argument("name", location="form", type=str, required=True)
-auth_parser.add_argument("uin",  location="form", type=str, required=True)
- 
-kyc_parser = reqparse.RequestParser()
-kyc_parser.add_argument("name", location="form", type=str, required=True)
-kyc_parser.add_argument("uin",  location="form", type=str, required=True)
+qr_parser = reqparse.RequestParser()
+qr_parser.add_argument(
+    "file", location="files", type=FileStorage, required=True,
+    help="Image of the National ID QR code"
+)
 
 # ── POST /mosip/auth ──
 @api.route("/auth")
 class Auth(Resource):
-    @api.expect(auth_parser)
+    @api.expect(qr_parser)
     @api.doc(responses={
         200: "Returns auth_status: true/false",
+        400: "No QR code found or could not parse ID",
         502: "MOSIP request failed",
     })
     def post(self):
-        """Yes/no identity verification against MOSIP using name and UIN."""
-        args = auth_parser.parse_args()
-        name = args.get("name")
-        uin  = args.get("uin")
- 
+        """Yes/no identity verification — scans QR code from uploaded National ID image."""
+        args = qr_parser.parse_args()
+
+        qr_data = read_qr(args.get("file"))
+        if not qr_data:
+            return utils.gen_error("No QR code found in image", 400)
+
+        uin, name = parse_national_id_qr(qr_data)
+        if not uin or not name:
+            return utils.gen_error("Could not parse UIN and name from QR code", 400)
+
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],
         )
@@ -74,18 +102,25 @@ class Auth(Resource):
 # ── POST /mosip/kyc ──
 @api.route("/kyc")
 class KYC(Resource):
-    @api.expect(kyc_parser)
+    @api.expect(qr_parser)
     @api.doc(responses={
         200: "Returns demographics and photo path",
-        500: "Could not decode photo",
+        400: "No QR code found or could not parse ID",
+        500: "No photo found or could not decode photo",
         502: "MOSIP request failed",
     })
     def post(self):
-        """Fetch full KYC data from MOSIP and save the ID photo."""
-        args = kyc_parser.parse_args()
-        name = args.get("name")
-        uin  = args.get("uin")
- 
+        """Fetch full KYC data and save ID photo — scans QR code from uploaded National ID image."""
+        args = qr_parser.parse_args()
+
+        qr_data = read_qr(args.get("file"))
+        if not qr_data:
+            return utils.gen_error("No QR code found in image", 400)
+
+        uin, name = parse_national_id_qr(qr_data)
+        if not uin or not name:
+            return utils.gen_error("Could not parse UIN and name from QR code", 400)
+
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],
         )
