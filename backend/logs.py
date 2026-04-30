@@ -15,3 +15,6 @@ def on_examinee_creation(examinee: Examinee):
         )
 
     db.session.add(entry)
+
+def on_examinee_time_in(examinee: Examinee):
+    ...
