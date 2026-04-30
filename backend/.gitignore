@@ -2,5 +2,5 @@ __pycache__/
 serve/
 .env
 mosip_keys/
-config.toml
+mosip_config.toml
 authenticator.log
