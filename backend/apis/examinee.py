@@ -114,6 +114,7 @@ class LogTimeIn(Resource):
 
         examinee_id = args.get('examinee_id')
         exam_kit_id = args.get('exam_kit_id')
+
         return {}, 200
 
 @api.route('/timeout')
@@ -121,4 +122,6 @@ class LogTimeIn(Resource):
     @api.expect(logtime_args)
     def post(self):
         args = logtime_args.parse_args()
+        examinee_id = args.get('examinee_id')
+        exam_kit_id = args.get('exam_kit_id')
         return {}, 200
