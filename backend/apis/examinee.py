@@ -32,7 +32,7 @@ class GetExaminee(Resource):
 
         user = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
         if user is None:
-            return {"error": "examinee does not exist"}, 400
+            return {"error": "examinee does not exist"}, 404
         return user[0].to_dict()
     
     @api.expect(examinee_parser_creator)
