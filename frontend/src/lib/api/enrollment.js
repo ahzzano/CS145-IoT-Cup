@@ -25,12 +25,12 @@ async function getExamineeImage(img_path) {
  */
 export async function enrollExaminee(qrImage) {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
-    const formData = new FormData();
-    formData.append('file', qrImage);
+    const auth_form_data = new FormData();
+    auth_form_data.append('file', qrImage);
 
     const auth_response = await fetch(`${apiBaseUrl}/mosip/auth`, {
         method: 'POST',
-        body: formData,
+        body: auth_form_data,
         cache: 'no-store'
     });
 
@@ -45,9 +45,13 @@ export async function enrollExaminee(qrImage) {
 
     const examinee_id = auth_json.data.uin
 
+
+    const kyc_form_data = new FormData()
+    kyc_form_data.append('file', qrImage);
+
     const kyc_response = await fetch(`${apiBaseUrl}/mosip/kyc`, {
         method: 'POST',
-        body: formData,
+        body: kyc_form_data,
         cache: 'no-store'
     })
 
