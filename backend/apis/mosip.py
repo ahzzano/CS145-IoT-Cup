@@ -4,11 +4,12 @@ import json
 import cv2
 import numpy as np
 from dynaconf import Dynaconf
-from flask import current_app
+from flask import current_app, make_response
 from flask_restx import Namespace, Resource, reqparse
 from mosip_auth_sdk import MOSIPAuthenticator
 from mosip_auth_sdk.models import DemographicsModel
 from werkzeug.datastructures import FileStorage
+from auth import auth_required, generate_jwt
 from models.examinee import Examinee
 from models.base import db
 import utils
@@ -81,7 +82,7 @@ class Auth(Resource):
             demographic_data=demographics_data,
             consent=True,
         )
- 
+
         if not response.ok:
             return utils.gen_error("MOSIP auth request failed", 502)
  
@@ -90,14 +91,17 @@ class Auth(Resource):
         auth_status    = body.get("response", {}).get("authStatus", False)
         transaction_id = body.get("transactionID", "")
         errors         = body.get("errors")
- 
-        return utils.gen_success_message("auth complete", {
+
+        success_response = make_response(utils.gen_success_message("auth complete", {
             "uin":            uin,
             "name":           name,
             "auth_status":    auth_status,
             "transaction_id": transaction_id,
             "errors":         errors,
-        })
+        }))
+        success_response.set_cookie('token', generate_jwt({'uin': uin, 'name': name}))
+
+        return  success_response
 
 # ── POST /mosip/kyc ──
 @api.route("/kyc")
@@ -162,4 +166,10 @@ class KYC(Resource):
             "demographics": decrypted,
             "photo_path":   photo_path,
         })
- 
+
+@api.route("/auth2_test")
+class Auth2Test(Resource):
+    method_decorators = [auth_required]
+    def get(self, user):
+        print(user)
+        return utils.gen_success_message("Enjoy your evening", {})

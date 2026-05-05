@@ -25,6 +25,7 @@ DBNAME = os.getenv("dbname")
 
 DATABASE_URL = f'postgresql+psycopg://{USER}:{PASSWORD}@{HOST}:{PORT}/{DBNAME}?sslmode=require'
 
+app.config['SECRET_KEY'] = 'loverboy'
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['UPLOAD_FOLDER'] = 'serve/'
 
