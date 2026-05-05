@@ -4,11 +4,12 @@ import json
 import cv2
 import numpy as np
 from dynaconf import Dynaconf
-from flask import current_app
+from flask import current_app, make_response
 from flask_restx import Namespace, Resource, reqparse
 from mosip_auth_sdk import MOSIPAuthenticator
 from mosip_auth_sdk.models import DemographicsModel
 from werkzeug.datastructures import FileStorage
+from auth import auth_required, generate_jwt
 from models.examinee import Examinee
 from models.base import db
 import utils
@@ -81,45 +82,48 @@ class Auth(Resource):
             demographic_data=demographics_data,
             consent=True,
         )
- 
+
         if not response.ok:
             return utils.gen_error("MOSIP auth request failed", 502)
  
         body = response.json()
  
-        auth_status    = body.get("response", {}).get("authStatus", False)
-        transaction_id = body.get("transactionID", "")
-        errors         = body.get("errors")
- 
-        return utils.gen_success_message("auth complete", {
+        auth_status     = body.get("response", {}).get("authStatus", False)
+        transaction_id  = body.get("transactionID", "")
+        errors          = body.get("errors")
+        jwt_token       = generate_jwt({'uin': uin, 'name': name})
+
+        success_response = make_response(utils.gen_success_message("auth complete", {
             "uin":            uin,
             "name":           name,
             "auth_status":    auth_status,
             "transaction_id": transaction_id,
+            # "token":            jwt_token,
             "errors":         errors,
-        })
+        }))
+        print(jwt_token)
+        success_response.set_cookie(
+            'token',
+            jwt_token,
+            samesite='Lax'
+        )
+
+        return  success_response
 
 # ── POST /mosip/kyc ──
 @api.route("/kyc")
 class KYC(Resource):
-    @api.expect(qr_parser)
+    method_decorators = [auth_required]
     @api.doc(responses={
         200: "Returns demographics and photo path",
         400: "No QR code found or could not parse ID",
         500: "No photo found or could not decode photo",
         502: "MOSIP request failed",
     })
-    def post(self):
+    def get(self, user):
         """Fetch full KYC data and save ID photo — scans QR code from uploaded National ID image."""
-        args = qr_parser.parse_args()
-
-        qr_data = read_qr(args.get("file"))
-        if not qr_data:
-            return utils.gen_error("No QR code found in image", 400)
-
-        uin, name = parse_national_id_qr(qr_data)
-        if not uin or not name:
-            return utils.gen_error("Could not parse UIN and name from QR code", 400)
+        uin: str = user['uin']
+        name: str = user['name']
 
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],
@@ -162,4 +166,9 @@ class KYC(Resource):
             "demographics": decrypted,
             "photo_path":   photo_path,
         })
- 
+
+@api.route("/auth2_test")
+class Auth2Test(Resource):
+    method_decorators = [auth_required]
+    def get(self, user):
+        return utils.gen_success_message("Enjoy your evening", {})

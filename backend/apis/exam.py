@@ -1,4 +1,5 @@
 from flask.json import jsonify
+from auth import auth_required
 from models import exam_kit
 from models.base import db
 from flask_restx import Namespace, Resource, fields, reqparse
@@ -8,10 +9,9 @@ from models.examinee import *
 
 import utils
 
-api = Namespace('exam')
+api = Namespace('exam', description="All exam related API calls")
 
 link_exam =  reqparse.RequestParser()
-link_exam.add_argument('examinee', location='form', type=int, required=True)
 link_exam.add_argument('exam_id', location='form', type=int, required=True)
 
 args_link_exam =  reqparse.RequestParser()
@@ -20,14 +20,21 @@ args_link_exam.add_argument('exam_id', location='args', type=int, required=True)
 
 @api.route('/link')
 class ExamLinker(Resource):
+    method_decorators = [auth_required]
+
     @api.expect(link_exam)
-    def post(self):
+    def post(self, user):
+        """
+        Link an exam and the examinee.
+        Requires AUTH
+        """
         args = link_exam.parse_args()
 
-        examinee = args.get('examinee')
+        print(user)
+        examinee_id = int(user['uin'])
         exam_id = args.get('exam_id')
 
-        examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee)).first()
+        examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
         exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_id)).first()
         db.session.commit()
 
@@ -45,38 +52,37 @@ class ExamLinker(Resource):
         ek.examinee_id = examinee[0].id
         db.session.commit()
 
-        return ek.to_dict(), 200
+        return utils.gen_success_message("Exam Successfully Linked", ek.to_dict())
     
-    @api.expect(args_link_exam)
-    def get(self):
+    def get(self, user):
+        """
+        Checks if a user has a linked exam kit
+        Requires AUTH
+        """
         args = args_link_exam.parse_args()
 
-        examinee_id = args.get('examinee')
-        exam_id = args.get('exam_id')
+        examinee_id = int(user['uin'])
 
         examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
-        exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_id)).first()
+        exam_kit = db.session.execute(db.select(ExamKit).filter_by(examinee_id=examinee_id)).first()
         db.session.commit()
 
         if examinee is None:
             return {"error": "examinee does not exist"}, 404
         
         if exam_kit is None:
-            return {"error": "exam kit does not exist"}, 404
+            return utils.gen_success_message("User has no exam linked", {'linked': False})
 
         if exam_kit[0].examinee_id != examinee_id:
-            return {'linked': False}, 200
+            return utils.gen_success_message("User has no exam linked", {'linked': False})
 
-        return {'linked': True}, 200
-
-unlink_exam =  reqparse.RequestParser()
-unlink_exam.add_argument('exam_id', location='form', type=int, required=True)
+        return utils.gen_success_message("User has an exam linked", {'linked': True})
 
 @api.route('/unlink')
 class ExamUnlinker(Resource):
-    @api.expect(unlink_exam)
+    @api.expect(link_exam)
     def post(self):
-        args = unlink_exam.parse_args()
+        args = link_exam.parse_args()
         exam_id = args.get('exam_id')
 
         exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_id)).first()
@@ -94,11 +100,22 @@ class ExamUnlinker(Resource):
         return ek.to_dict(), 200
 
 
-submit_exam_parser = reqparse.RequestParser()
-submit_exam_parser.add_argument('exam_id', location='form', type=int, required=True)
-
 @api.route('/submit')
 class submit_exam(Resource):
-    @api.expect(submit_exam_parser)
-    def post(self):
-        return {}, 200
+    method_decorators = [auth_required]
+    def post(self, user):
+        "Submit an exam"
+        examinee_id = int(user['uin'])
+
+        exam_kit = db.session.execute(
+                db.select(ExamKit).filter_by(examinee_id=examinee_id)
+                ).first()
+
+        db.session.commit()
+        if exam_kit is None:
+            return utils.gen_error("Examinee has no linked exam kit yet. Please link an exam kit first", 400)
+        
+        exam_kit[0].submitted = True
+        db.session.commit()
+
+        return utils.gen_success_message("Exam kit submitted", {})
