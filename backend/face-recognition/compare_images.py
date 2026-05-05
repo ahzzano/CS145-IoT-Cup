@@ -1,6 +1,8 @@
 from deepface import DeepFace
 
-MODEL_NAME = "SFace" # try Facenet more accurate slower just in case we need it
+# try Facenet/ArcFace/RetinaFace more accurate slower just in case we need it
+# try Sface for something less accurate but fast
+MODEL_NAME = "Facenet" 
 DETECTOR_BACKEND = "opencv"
 
 
