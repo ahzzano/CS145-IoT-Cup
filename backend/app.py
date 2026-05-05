@@ -32,7 +32,7 @@ app.config['UPLOAD_FOLDER'] = 'serve/'
 db.init_app(app)
 api.init_app(app)
 migrate = Migrate(app, db)
-cors = CORS(app)
+cors = CORS(app, supports_credentials=True)
 
 @app.route('/serve/<filename>')
 def view_file(filename):

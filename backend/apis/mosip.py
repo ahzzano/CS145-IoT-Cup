@@ -88,18 +88,25 @@ class Auth(Resource):
  
         body = response.json()
  
-        auth_status    = body.get("response", {}).get("authStatus", False)
-        transaction_id = body.get("transactionID", "")
-        errors         = body.get("errors")
+        auth_status     = body.get("response", {}).get("authStatus", False)
+        transaction_id  = body.get("transactionID", "")
+        errors          = body.get("errors")
+        jwt_token       = generate_jwt({'uin': uin, 'name': name})
 
         success_response = make_response(utils.gen_success_message("auth complete", {
             "uin":            uin,
             "name":           name,
             "auth_status":    auth_status,
             "transaction_id": transaction_id,
+            # "token":            jwt_token,
             "errors":         errors,
         }))
-        success_response.set_cookie('token', generate_jwt({'uin': uin, 'name': name}))
+        print(jwt_token)
+        success_response.set_cookie(
+            'token',
+            jwt_token,
+            samesite='Lax'
+        )
 
         return  success_response
 

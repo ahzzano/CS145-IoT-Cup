@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE_URL = '/api';
+// const DEFAULT_API_BASE_URL = 'http://localhost:8000'
 /**
  * @typedef {{ success: true; message: string; examinee_id: string }} EnrollmentSuccess
  * @typedef {{ success: false; error: string }} EnrollmentError
@@ -31,7 +32,8 @@ export async function enrollExaminee(qrImage) {
     const auth_response = await fetch(`${apiBaseUrl}/mosip/auth`, {
         method: 'POST',
         body: auth_form_data,
-        cache: 'no-store'
+        cache: 'no-store',
+        credentials: 'include'
     });
 
     const auth_json = await auth_response.json().catch(() => ({}));
@@ -45,14 +47,10 @@ export async function enrollExaminee(qrImage) {
 
     const examinee_id = auth_json.data.uin
 
-
-    const kyc_form_data = new FormData()
-    kyc_form_data.append('file', qrImage);
-
     const kyc_response = await fetch(`${apiBaseUrl}/mosip/kyc`, {
-        method: 'POST',
-        body: kyc_form_data,
-        cache: 'no-store'
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include'
     })
 
     if (!kyc_response.ok) {
@@ -72,15 +70,16 @@ export async function enrollExaminee(qrImage) {
     const picture_blob = await getExamineeImage(examinee_picture)
     const picture_file = new File([picture_blob], examinee_picture_fname, {type: picture_blob.type})
 
-    const examineeFormData = new FormData()
-    examineeFormData.append('file', picture_file)
-    examineeFormData.append('name', examinee_name)
-    examineeFormData.append('id', examinee_id)
+    const examinee_form_data = new FormData()
+    examinee_form_data.append('file', picture_file)
+    examinee_form_data.append('name', examinee_name)
+    examinee_form_data.append('id', examinee_id)
 
     const new_examinee_response = await fetch(`${apiBaseUrl}/examinee/`, {
         method: 'POST',
-        body: examineeFormData,
-        cache: 'no-store'
+        body: examinee_form_data,
+        cache: 'no-store',
+        credentials: 'include'
     })
 
     if(!new_examinee_response.ok) {
