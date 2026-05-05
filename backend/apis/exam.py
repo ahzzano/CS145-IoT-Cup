@@ -9,7 +9,7 @@ from models.examinee import *
 
 import utils
 
-api = Namespace('exam')
+api = Namespace('exam', description="All exam related API calls")
 
 link_exam =  reqparse.RequestParser()
 link_exam.add_argument('exam_id', location='form', type=int, required=True)
@@ -24,6 +24,10 @@ class ExamLinker(Resource):
 
     @api.expect(link_exam)
     def post(self, user):
+        """
+        Link an exam and the examinee.
+        Requires AUTH
+        """
         args = link_exam.parse_args()
 
         print(user)
@@ -50,27 +54,29 @@ class ExamLinker(Resource):
 
         return utils.gen_success_message("Exam Successfully Linked", ek.to_dict())
     
-    @api.expect(args_link_exam)
     def get(self, user):
+        """
+        Checks if a user has a linked exam kit
+        Requires AUTH
+        """
         args = args_link_exam.parse_args()
 
-        examinee_id = args.get('examinee')
-        exam_id = args.get('exam_id')
+        examinee_id = int(user['uin'])
 
         examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
-        exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_id)).first()
+        exam_kit = db.session.execute(db.select(ExamKit).filter_by(examinee_id=examinee_id)).first()
         db.session.commit()
 
         if examinee is None:
             return {"error": "examinee does not exist"}, 404
         
         if exam_kit is None:
-            return {"error": "exam kit does not exist"}, 404
+            return utils.gen_success_message("User has no exam linked", {'linked': False})
 
         if exam_kit[0].examinee_id != examinee_id:
-            return {'linked': False}, 200
+            return utils.gen_success_message("User has no exam linked", {'linked': False})
 
-        return {'linked': True}, 200
+        return utils.gen_success_message("User has an exam linked", {'linked': True})
 
 @api.route('/unlink')
 class ExamUnlinker(Resource):
