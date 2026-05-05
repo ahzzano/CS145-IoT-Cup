@@ -1,9 +1,9 @@
-from sqlalchemy import LargeBinary, ForeignKey
+from sqlalchemy import BigInteger, LargeBinary, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from models.base import db
 
 class Examinee(db.Model):
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, init=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, init=False)
     name: Mapped[str]
     picture: Mapped[str]
 
