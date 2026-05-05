@@ -1,5 +1,8 @@
 from datetime import datetime
+import importlib.util
 import os
+import tempfile
+from pathlib import Path
 
 from flask import current_app
 from flask_restx.errors import HTTPStatus
@@ -11,11 +14,47 @@ from flask_restx import Namespace, Resource, abort, reqparse
 from logs import on_examinee_creation
 from models.exam_kit import ExamKit
 from models.examinee import *
+from models.examinee_picture import ExamineePicture
 from models.logs import LogEntry
 
 import utils
 
 api = Namespace("examinee", description='All API endpoints for Examinees')
+
+
+def _compare_face_bytes(baseline: bytes, candidate: bytes) -> dict:
+    module_path = Path(__file__).resolve().parents[1] / "face-recognition" / "compare_images.py"
+    spec = importlib.util.spec_from_file_location("compare_images", module_path)
+    compare_images = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(compare_images)
+
+    with tempfile.NamedTemporaryFile(suffix=".jpg") as base_f, \
+         tempfile.NamedTemporaryFile(suffix=".jpg") as cand_f:
+        base_f.write(baseline); base_f.flush()
+        cand_f.write(candidate); cand_f.flush()
+        return compare_images.compare_faces(base_f.name, cand_f.name)
+
+
+def _read_examinee_baseline(examinee) -> bytes:
+    pic_path = os.path.join(current_app.config['UPLOAD_FOLDER'], examinee.picture)
+    with open(pic_path, 'rb') as f:
+        return f.read()
+
+
+def _get_examinee_or_error(examinee_id: int):
+    examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
+    if examinee is None:
+        return None, utils.gen_error("Examinee does not exist", 404)
+    return examinee[0], None
+
+
+def _latest_picture_session(examinee_id: int):
+    return (
+        db.session.query(ExamineePicture)
+        .filter_by(examinee_id=examinee_id)
+        .order_by(ExamineePicture.id.desc())
+        .first()
+    )
 
 examinee_parser = reqparse.RequestParser()
 examinee_parser.add_argument('id', type=int, help='id of the user', location='args')
@@ -75,6 +114,8 @@ class GetExaminee(Resource):
         on_examinee_creation(examinee)
 
         db.session.commit()
+
+        # print(f"[/examinee/] created examinee_id={examinee.id} name={examinee.name} picture={examinee.picture}")
 
         return utils.gen_success_message("new user created", examinee.to_dict())
     
@@ -170,3 +211,116 @@ class LogTimeOut(Resource):
         db.session.commit()
 
         return utils.gen_success_message("examinee has timed out", 200)
+
+
+pretest_parser = reqparse.RequestParser()
+pretest_parser.add_argument('examinee_id', location='form', type=int, required=True)
+pretest_parser.add_argument('file', location='files', type=FileStorage, required=True)
+
+
+@api.route('/pretest')
+class PreTestFace(Resource):
+    @api.expect(pretest_parser)
+    @api.doc(responses={400: "Missing image or examinee baseline", 403: "Face mismatch", 404: "Examinee does not exist", 200: "Face match"})
+    def post(self):
+        args = pretest_parser.parse_args()
+        examinee_id = args.get('examinee_id')
+        examinee, error = _get_examinee_or_error(examinee_id)
+        if error:
+            # print(f"[/pretest] examinee_id={examinee_id} not found")
+            return error
+
+        pre_test_bytes = args.get('file').read()
+        if not pre_test_bytes:
+            return utils.gen_error("No pre-test image provided", 400)
+
+        try:
+            baseline_bytes = _read_examinee_baseline(examinee)
+        except FileNotFoundError:
+            # print(f"[/pretest] examinee_id={examinee_id} baseline picture missing on disk: {examinee.picture}")
+            return utils.gen_error("Examinee baseline picture not found on disk", 400)
+
+        try:
+            comparison = _compare_face_bytes(baseline_bytes, pre_test_bytes)
+        except Exception as exc:
+            # print(f"[/pretest] examinee_id={examinee_id} compare error: {exc}")
+            return utils.gen_error("Faces don't match", 400)
+
+        picture = ExamineePicture(
+            pre_test=pre_test_bytes,
+            examinee_id=examinee.id,
+            post_test=b'',
+            post_conf=0.0,
+        )
+        picture.pre_conf = comparison["confidence"]
+        db.session.add(picture)
+        db.session.commit()
+
+        allowed = comparison["match"]
+        pre_conf = comparison["confidence"]
+        # print(f"[/pretest] examinee_id={examinee_id} picture_id={picture.id} match={allowed} pre_conf={pre_conf}")
+
+        return {
+            "message": "ok" if allowed else "not_allowed",
+            "data": {
+                "allowed": allowed,
+                "pre_conf": pre_conf,
+                "picture": picture.to_dict(),
+            },
+        }, 200 if allowed else 403
+
+
+posttest_parser = reqparse.RequestParser()
+posttest_parser.add_argument('examinee_id', location='form', type=int, required=True)
+posttest_parser.add_argument('file', location='files', type=FileStorage, required=True)
+
+
+@api.route('/posttest')
+class PostTestFace(Resource):
+    @api.expect(posttest_parser)
+    @api.doc(responses={400: "Missing image or no pre-test row", 403: "Face mismatch", 404: "Examinee does not exist", 200: "Face match"})
+    def post(self):
+        args = posttest_parser.parse_args()
+        examinee_id = args.get('examinee_id')
+        examinee, error = _get_examinee_or_error(examinee_id)
+        if error:
+            # print(f"[/posttest] examinee_id={examinee_id} not found")
+            return error
+
+        picture = _latest_picture_session(examinee.id)
+        if picture is None:
+            # print(f"[/posttest] examinee_id={examinee_id} has no pre_test row")
+            return utils.gen_error("No pre-test session found for examinee", 400)
+
+        post_test_bytes = args.get('file').read()
+        if not post_test_bytes:
+            return utils.gen_error("No post-test image provided", 400)
+
+        try:
+            baseline_bytes = _read_examinee_baseline(examinee)
+        except FileNotFoundError:
+            # print(f"[/posttest] examinee_id={examinee_id} baseline picture missing on disk: {examinee.picture}")
+            return utils.gen_error("Examinee baseline picture not found on disk", 400)
+
+        try:
+            comparison = _compare_face_bytes(baseline_bytes, post_test_bytes)
+        except Exception as exc:
+            # print(f"[/posttest] examinee_id={examinee_id} compare error: {exc}")
+            return utils.gen_error("Faces don't match", 400)
+
+        picture.post_test = post_test_bytes
+        picture.post_conf = comparison["confidence"]
+        db.session.commit()
+
+        allowed = comparison["match"]
+        post_conf = comparison["confidence"]
+        # print(f"[/posttest] examinee_id={examinee_id} picture_id={picture.id} match={allowed} post_conf={post_conf}")
+
+        return {
+            "message": "ok" if allowed else "not_allowed",
+            "data": {
+                "allowed": allowed,
+                "post_conf": post_conf,
+                "picture": picture.to_dict(),
+            },
+        }, 200 if allowed else 403
