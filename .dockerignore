@@ -1,0 +1,9 @@
+node_modules
+.venv
+__pycache__
+.svelte-kit
+dist
+.git
+.DS_Store
+*.log
+mosip_keys

@@ -2,8 +2,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_migrate import Migrate
+from flask_cors import CORS
 
 from models.base import db
 from models.examinee import *
@@ -24,17 +25,21 @@ DBNAME = os.getenv("dbname")
 
 DATABASE_URL = f'postgresql+psycopg://{USER}:{PASSWORD}@{HOST}:{PORT}/{DBNAME}?sslmode=require'
 
+app.config['SECRET_KEY'] = 'loverboy'
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['UPLOAD_FOLDER'] = 'serve/'
 
 db.init_app(app)
 api.init_app(app)
 migrate = Migrate(app, db)
+cors = CORS(app, supports_credentials=True)
 
-
+@app.route('/serve/<filename>')
+def view_file(filename):
+    return send_from_directory('serve/', filename)
 
 def main():
-    app.run(debug=True, port=8000)
+    app.run(debug=True, host='0.0.0.0', port=8000)
 
 if __name__ == "__main__":
     main()

@@ -1,10 +1,23 @@
 const DEFAULT_API_BASE_URL = '/api';
-
+// const DEFAULT_API_BASE_URL = 'http://localhost:8000'
 /**
  * @typedef {{ success: true; message: string; examinee_id: string }} EnrollmentSuccess
  * @typedef {{ success: false; error: string }} EnrollmentError
  * @typedef {EnrollmentSuccess | EnrollmentError} EnrollmentResponse
  */
+
+async function getExamineeImage(img_path) {
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
+    console.log(`${apiBaseUrl}/${img_path}`)
+    const response = await fetch(`${apiBaseUrl}/${img_path}`)
+
+    if (!response.ok) {
+        return null
+    } else {
+        return await response.blob()
+    }
+}
+
 
 /**
  * Sends QR image for enrollment validation and registration.
@@ -12,35 +25,73 @@ const DEFAULT_API_BASE_URL = '/api';
  * @returns {Promise<EnrollmentResponse>}
  */
 export async function enrollExaminee(qrImage) {
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
-  const formData = new FormData();
-  formData.append('national_id_qr', qrImage);
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
+    const auth_form_data = new FormData();
+    auth_form_data.append('file', qrImage);
 
-  const response = await fetch(`${apiBaseUrl}/enroll`, {
-    method: 'POST',
-    body: formData,
-    cache: 'no-store'
-  });
+    const auth_response = await fetch(`${apiBaseUrl}/mosip/auth`, {
+        method: 'POST',
+        body: auth_form_data,
+        cache: 'no-store',
+        credentials: 'include'
+    });
 
-  const payload = await response.json().catch(() => ({}));
+    const auth_json = await auth_response.json().catch(() => ({}));
 
-  if (!response.ok) {
+    if (!auth_response.ok) {
+        return {
+            success: false,
+            error: auth_json?.error || 'Unable to enroll. Please try again.'
+        };
+    }
+
+    const examinee_id = auth_json.data.uin
+
+    const kyc_response = await fetch(`${apiBaseUrl}/mosip/kyc`, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include'
+    })
+
+    if (!kyc_response.ok) {
+        return {
+            success: false,
+            error: auth_json?.error || 'Unable to enroll. Please try again.'
+        };
+    }
+
+    const kyc_json = await kyc_response.json().catch(() => ({}))
+    const examinee_picture = kyc_json.data.photo_path
+    const examinee_name = kyc_json.data.name
+
+    const examinee_picture_fname = examinee_picture.split("/")[1]
+    console.log(examinee_picture_fname)
+
+    const picture_blob = await getExamineeImage(examinee_picture)
+    const picture_file = new File([picture_blob], examinee_picture_fname, {type: picture_blob.type})
+
+    const examinee_form_data = new FormData()
+    examinee_form_data.append('file', picture_file)
+    examinee_form_data.append('name', examinee_name)
+    examinee_form_data.append('id', examinee_id)
+
+    const new_examinee_response = await fetch(`${apiBaseUrl}/examinee/`, {
+        method: 'POST',
+        body: examinee_form_data,
+        cache: 'no-store',
+        credentials: 'include'
+    })
+
+    if(!new_examinee_response.ok) {
+        return {
+            success: false,
+            error: auth_json?.error || 'Unable to enroll. Please try again.'
+        };
+    }
+
     return {
-      success: false,
-      error: payload?.error || 'Unable to enroll. Please try again.'
+        success: true,
+        message: 'Enrollment successful.',
+        examinee_id: auth_json.examinee_id || ''
     };
-  }
-
-  if (payload?.success) {
-    return {
-      success: true,
-      message: payload.message || 'Enrollment successful.',
-      examinee_id: payload.examinee_id || ''
-    };
-  }
-
-  return {
-    success: false,
-    error: payload?.error || 'Enrollment failed. National ID QR may be invalid.'
-  };
 }
