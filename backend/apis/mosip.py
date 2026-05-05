@@ -106,24 +106,17 @@ class Auth(Resource):
 # ── POST /mosip/kyc ──
 @api.route("/kyc")
 class KYC(Resource):
-    @api.expect(qr_parser)
+    method_decorators = [auth_required]
     @api.doc(responses={
         200: "Returns demographics and photo path",
         400: "No QR code found or could not parse ID",
         500: "No photo found or could not decode photo",
         502: "MOSIP request failed",
     })
-    def post(self):
+    def get(self, user):
         """Fetch full KYC data and save ID photo — scans QR code from uploaded National ID image."""
-        args = qr_parser.parse_args()
-
-        qr_data = read_qr(args.get("file"))
-        if not qr_data:
-            return utils.gen_error("No QR code found in image", 400)
-
-        uin, name = parse_national_id_qr(qr_data)
-        if not uin or not name:
-            return utils.gen_error("Could not parse UIN and name from QR code", 400)
+        uin: str = user['uin']
+        name: str = user['name']
 
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],
@@ -171,5 +164,4 @@ class KYC(Resource):
 class Auth2Test(Resource):
     method_decorators = [auth_required]
     def get(self, user):
-        print(user)
         return utils.gen_success_message("Enjoy your evening", {})

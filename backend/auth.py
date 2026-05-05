@@ -20,13 +20,17 @@ def generate_jwt(user_data):
 def auth_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.cookies.get('token')
+        token = request.cookies.get('token') or request.headers.get('Authorization', '').replace('Bearer ', '')
 
         if not token:
             return utils.gen_error("Token is missing", 401)
         
         try:
             data = jwt.decode(token, SECRET_KEY, algorithms='HS256')
+            user = {
+                    'uin': data['uin'],
+                    'name': data['name']
+                    }
         except jwt.ExpiredSignatureError:
             return utils.gen_error("Token has expired", 401)
         except:
