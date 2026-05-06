@@ -111,15 +111,21 @@ class GetExaminee(Resource):
         name = args.get('name')
         if not name:
             return utils.gen_error("No name provided", 400)
-        
+
+        requested_id = args.get('id')
+        if requested_id:
+            existing = db.session.execute(db.select(Examinee).filter_by(id=requested_id)).first()
+            if existing:
+                return utils.gen_success_message("new user created", existing[0].to_dict())
+
         filename = file.filename
         file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
 
         examinee = Examinee(name, filename)
-        if args.get('id'):
-            examinee.id = args.get('id')
+        if requested_id:
+            examinee.id = requested_id
 
-        examinee.name = name 
+        examinee.name = name
         examinee.picture = filename
 
         db.session.add(examinee)
@@ -128,8 +134,9 @@ class GetExaminee(Resource):
         db.session.add(ek)
         db.session.flush()
 
-        le = LogEntry(examinee.id)
-        db.session.add(le)
+        if not db.session.query(LogEntry).filter_by(examinee=examinee.id).first():
+            le = LogEntry(examinee.id)
+            db.session.add(le)
 
         on_examinee_creation(examinee)
 
@@ -273,12 +280,19 @@ class PreTestFace(Resource):
                 },
             }, 400
 
-        picture = ExamineePicture(
-            pre_test=pre_test_bytes,
-            examinee_id=examinee.id,
-            post_test=b'',
-            post_conf=0.0,
-        )
+        picture = _latest_picture_session(examinee.id)
+        if picture is None:
+            picture = ExamineePicture(
+                pre_test=pre_test_bytes,
+                examinee_id=examinee.id,
+                post_test=b'',
+                post_conf=0.0,
+            )
+        else:
+            picture.pre_test = pre_test_bytes
+            picture.post_test = b''
+            picture.post_conf = 0.0
+
         picture.pre_conf = comparison["confidence"]
         db.session.add(picture)
 
