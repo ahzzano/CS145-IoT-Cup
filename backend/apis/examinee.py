@@ -11,6 +11,7 @@ from werkzeug.datastructures import FileStorage
 
 from flask_restx import Namespace, Resource, abort, reqparse
 
+from auth import auth_required
 from logs import on_examinee_creation
 from models.exam_kit import ExamKit
 from models.examinee import *
@@ -48,11 +49,30 @@ def _get_examinee_or_error(examinee_id: int):
     return examinee[0], None
 
 
+def _get_authenticated_examinee_or_error(user):
+    try:
+        examinee_id = int(user["uin"])
+    except (KeyError, TypeError, ValueError):
+        return None, None, utils.gen_error("Invalid MOSIP auth token", 401)
+
+    examinee, error = _get_examinee_or_error(examinee_id)
+    return examinee_id, examinee, error
+
+
 def _latest_picture_session(examinee_id: int):
     return (
         db.session.query(ExamineePicture)
         .filter_by(examinee_id=examinee_id)
         .order_by(ExamineePicture.id.desc())
+        .first()
+    )
+
+
+def _latest_log_entry(examinee_id: int):
+    return (
+        db.session.query(LogEntry)
+        .filter_by(examinee=examinee_id)
+        .order_by(LogEntry.log_id.desc())
         .first()
     )
 
@@ -214,18 +234,18 @@ class LogTimeOut(Resource):
 
 
 pretest_parser = reqparse.RequestParser()
-pretest_parser.add_argument('examinee_id', location='form', type=int, required=True)
 pretest_parser.add_argument('file', location='files', type=FileStorage, required=True)
 
 
 @api.route('/pretest')
 class PreTestFace(Resource):
+    method_decorators = [auth_required]
+
     @api.expect(pretest_parser)
-    @api.doc(responses={400: "Missing image or examinee baseline", 403: "Face mismatch", 404: "Examinee does not exist", 200: "Face match"})
-    def post(self):
+    @api.doc(responses={400: "Missing image or examinee baseline", 401: "Missing or invalid MOSIP auth", 403: "Face mismatch", 404: "Examinee does not exist", 200: "Face match"})
+    def post(self, user):
         args = pretest_parser.parse_args()
-        examinee_id = args.get('examinee_id')
-        examinee, error = _get_examinee_or_error(examinee_id)
+        examinee_id, examinee, error = _get_authenticated_examinee_or_error(user)
         if error:
             # print(f"[/pretest] examinee_id={examinee_id} not found")
             return error
@@ -244,7 +264,14 @@ class PreTestFace(Resource):
             comparison = _compare_face_bytes(baseline_bytes, pre_test_bytes)
         except Exception as exc:
             # print(f"[/pretest] examinee_id={examinee_id} compare error: {exc}")
-            return utils.gen_error("Faces don't match", 400)
+            return {
+                "error": "Face comparison failed",
+                "data": {
+                    "allowed": False,
+                    "pre_conf": None,
+                    "compare_error": str(exc),
+                },
+            }, 400
 
         picture = ExamineePicture(
             pre_test=pre_test_bytes,
@@ -254,6 +281,11 @@ class PreTestFace(Resource):
         )
         picture.pre_conf = comparison["confidence"]
         db.session.add(picture)
+
+        log_entry = _latest_log_entry(examinee.id)
+        if log_entry:
+            log_entry.exam_time_in = datetime.now()
+
         db.session.commit()
 
         allowed = comparison["match"]
@@ -261,28 +293,36 @@ class PreTestFace(Resource):
         # print(f"[/pretest] examinee_id={examinee_id} picture_id={picture.id} match={allowed} pre_conf={pre_conf}")
 
         return {
+            **({"error": "Faces don't match"} if not allowed else {}),
             "message": "ok" if allowed else "not_allowed",
             "data": {
                 "allowed": allowed,
                 "pre_conf": pre_conf,
+                "min_confidence": comparison["min_confidence"],
+                "distance": comparison["distance"],
+                "threshold": comparison["threshold"],
+                "deepface_verified": comparison["deepface_verified"],
+                "model": comparison["model"],
+                "detector_backend": comparison["detector_backend"],
+                "exam_time_in": log_entry.exam_time_in.isoformat() if log_entry and log_entry.exam_time_in else None,
                 "picture": picture.to_dict(),
             },
         }, 200 if allowed else 403
 
 
 posttest_parser = reqparse.RequestParser()
-posttest_parser.add_argument('examinee_id', location='form', type=int, required=True)
 posttest_parser.add_argument('file', location='files', type=FileStorage, required=True)
 
 
 @api.route('/posttest')
 class PostTestFace(Resource):
+    method_decorators = [auth_required]
+
     @api.expect(posttest_parser)
-    @api.doc(responses={400: "Missing image or no pre-test row", 403: "Face mismatch", 404: "Examinee does not exist", 200: "Face match"})
-    def post(self):
+    @api.doc(responses={400: "Missing image or no pre-test row", 401: "Missing or invalid MOSIP auth", 403: "Face mismatch", 404: "Examinee does not exist", 200: "Face match"})
+    def post(self, user):
         args = posttest_parser.parse_args()
-        examinee_id = args.get('examinee_id')
-        examinee, error = _get_examinee_or_error(examinee_id)
+        examinee_id, examinee, error = _get_authenticated_examinee_or_error(user)
         if error:
             # print(f"[/posttest] examinee_id={examinee_id} not found")
             return error
@@ -306,10 +346,22 @@ class PostTestFace(Resource):
             comparison = _compare_face_bytes(baseline_bytes, post_test_bytes)
         except Exception as exc:
             # print(f"[/posttest] examinee_id={examinee_id} compare error: {exc}")
-            return utils.gen_error("Faces don't match", 400)
+            return {
+                "error": "Face comparison failed",
+                "data": {
+                    "allowed": False,
+                    "post_conf": None,
+                    "compare_error": str(exc),
+                },
+            }, 400
 
         picture.post_test = post_test_bytes
         picture.post_conf = comparison["confidence"]
+
+        log_entry = _latest_log_entry(examinee.id)
+        if log_entry:
+            log_entry.exam_time_out = datetime.now()
+
         db.session.commit()
 
         allowed = comparison["match"]
@@ -317,10 +369,18 @@ class PostTestFace(Resource):
         # print(f"[/posttest] examinee_id={examinee_id} picture_id={picture.id} match={allowed} post_conf={post_conf}")
 
         return {
+            **({"error": "Faces don't match"} if not allowed else {}),
             "message": "ok" if allowed else "not_allowed",
             "data": {
                 "allowed": allowed,
                 "post_conf": post_conf,
+                "min_confidence": comparison["min_confidence"],
+                "distance": comparison["distance"],
+                "threshold": comparison["threshold"],
+                "deepface_verified": comparison["deepface_verified"],
+                "model": comparison["model"],
+                "detector_backend": comparison["detector_backend"],
+                "exam_time_out": log_entry.exam_time_out.isoformat() if log_entry and log_entry.exam_time_out else None,
                 "picture": picture.to_dict(),
             },
         }, 200 if allowed else 403
