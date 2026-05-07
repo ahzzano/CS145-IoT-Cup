@@ -243,13 +243,18 @@ class LogTimeOut(Resource):
 pretest_parser = reqparse.RequestParser()
 pretest_parser.add_argument('file', location='files', type=FileStorage, required=True)
 
-
 @api.route('/pretest')
 class PreTestFace(Resource):
     method_decorators = [auth_required]
 
     @api.expect(pretest_parser)
-    @api.doc(responses={400: "Missing image or examinee baseline", 401: "Missing or invalid MOSIP auth", 403: "Face mismatch", 404: "Examinee does not exist", 200: "Face match"})
+    @api.doc(responses={
+            400: "Missing image or examinee baseline",
+            401: "Missing or invalid MOSIP auth",
+            403: "Face mismatch",
+            404: "Examinee does not exist",
+            200: "Face match"
+        })
     def post(self, user):
         args = pretest_parser.parse_args()
         examinee_id, examinee, error = _get_authenticated_examinee_or_error(user)
@@ -333,7 +338,13 @@ class PostTestFace(Resource):
     method_decorators = [auth_required]
 
     @api.expect(posttest_parser)
-    @api.doc(responses={400: "Missing image or no pre-test row", 401: "Missing or invalid MOSIP auth", 403: "Face mismatch", 404: "Examinee does not exist", 200: "Face match"})
+    @api.doc(responses={
+        400: "Missing image or no pre-test row",
+        401: "Missing or invalid MOSIP auth",
+        403: "Face mismatch",
+        404: "Examinee does not exist",
+        200: "Face match"
+    })
     def post(self, user):
         args = posttest_parser.parse_args()
         examinee_id, examinee, error = _get_authenticated_examinee_or_error(user)
