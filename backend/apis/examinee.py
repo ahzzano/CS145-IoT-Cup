@@ -311,27 +311,24 @@ class PreTestFace(Resource):
         pre_conf = comparison["confidence"]
         # print(f"[/pretest] examinee_id={examinee_id} picture_id={picture.id} match={allowed} pre_conf={pre_conf}")
 
-        return {
-            **({"error": "Faces don't match"} if not allowed else {}),
-            "message": "ok" if allowed else "not_allowed",
-            "data": {
-                "allowed": allowed,
-                "pre_conf": pre_conf,
-                "min_confidence": comparison["min_confidence"],
-                "distance": comparison["distance"],
-                "threshold": comparison["threshold"],
-                "deepface_verified": comparison["deepface_verified"],
-                "model": comparison["model"],
-                "detector_backend": comparison["detector_backend"],
-                "exam_time_in": log_entry.exam_time_in.isoformat() if log_entry and log_entry.exam_time_in else None,
-                "picture": picture.to_dict(),
-            },
-        }, 200 if allowed else 403
+        if not allowed:
+            return utils.gen_error("Faces do not match")
 
+        return utils.gen_success_message("Timein Success", {
+            "allowed": allowed,
+            "pre_conf": pre_conf,
+            "min_confidence": comparison["min_confidence"],
+            "distance": comparison["distance"],
+            "threshold": comparison["threshold"],
+            "deepface_verified": comparison["deepface_verified"],
+            "model": comparison["model"],
+            "detector_backend": comparison["detector_backend"],
+            "exam_time_in": log_entry.exam_time_in.isoformat() if log_entry and log_entry.exam_time_in else None,
+            "picture": picture.to_dict(),
+        })
 
 posttest_parser = reqparse.RequestParser()
 posttest_parser.add_argument('file', location='files', type=FileStorage, required=True)
-
 
 @api.route('/posttest')
 class PostTestFace(Resource):
@@ -370,15 +367,7 @@ class PostTestFace(Resource):
         try:
             comparison = _compare_face_bytes(baseline_bytes, post_test_bytes)
         except Exception as exc:
-            # print(f"[/posttest] examinee_id={examinee_id} compare error: {exc}")
-            return {
-                "error": "Face comparison failed",
-                "data": {
-                    "allowed": False,
-                    "post_conf": None,
-                    "compare_error": str(exc),
-                },
-            }, 400
+            return utils.gen_error("Face comparison failed", 400)
 
         picture.post_test = post_test_bytes
         picture.post_conf = comparison["confidence"]
@@ -393,19 +382,18 @@ class PostTestFace(Resource):
         post_conf = comparison["confidence"]
         # print(f"[/posttest] examinee_id={examinee_id} picture_id={picture.id} match={allowed} post_conf={post_conf}")
 
-        return {
-            **({"error": "Faces don't match"} if not allowed else {}),
-            "message": "ok" if allowed else "not_allowed",
-            "data": {
-                "allowed": allowed,
-                "post_conf": post_conf,
-                "min_confidence": comparison["min_confidence"],
-                "distance": comparison["distance"],
-                "threshold": comparison["threshold"],
-                "deepface_verified": comparison["deepface_verified"],
-                "model": comparison["model"],
-                "detector_backend": comparison["detector_backend"],
-                "exam_time_out": log_entry.exam_time_out.isoformat() if log_entry and log_entry.exam_time_out else None,
-                "picture": picture.to_dict(),
-            },
-        }, 200 if allowed else 403
+        if not allowed:
+            return utils.gen_error("Faces do not match", 403)
+
+        return utils.gen_success_message("Facial match detected", {
+            "allowed": allowed,
+            "post_conf": post_conf,
+            "min_confidence": comparison["min_confidence"],
+            "distance": comparison["distance"],
+            "threshold": comparison["threshold"],
+            "deepface_verified": comparison["deepface_verified"],
+            "model": comparison["model"],
+            "detector_backend": comparison["detector_backend"],
+            "exam_time_out": log_entry.exam_time_out.isoformat() if log_entry and log_entry.exam_time_out else None,
+            "picture": picture.to_dict(),
+        })
