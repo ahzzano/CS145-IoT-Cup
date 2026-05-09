@@ -243,6 +243,9 @@ class LogTimeOut(Resource):
 pretest_parser = reqparse.RequestParser()
 pretest_parser.add_argument('file', location='files', type=FileStorage, required=True)
 
+def check_face(examinee):
+    return True
+
 @api.route('/pretest')
 class PreTestFace(Resource):
     method_decorators = [auth_required]
@@ -259,18 +262,18 @@ class PreTestFace(Resource):
         args = pretest_parser.parse_args()
         examinee_id, examinee, error = _get_authenticated_examinee_or_error(user)
         if error:
-            # print(f"[/pretest] examinee_id={examinee_id} not found")
             return error
-
         pre_test_bytes = args.get('file').read()
         if not pre_test_bytes:
             return utils.gen_error("No pre-test image provided", 400)
 
-        try:
-            baseline_bytes = _read_examinee_baseline(examinee)
-        except FileNotFoundError:
-            # print(f"[/pretest] examinee_id={examinee_id} baseline picture missing on disk: {examinee.picture}")
-            return utils.gen_error("Examinee baseline picture not found on disk", 400)
+        ## REPLACE STARTS HERE
+        picture_path = os.path.join(current_app.config['UPLOAD_FOLDER'], examinee.picture)
+        if not os.path.exists(picture_path):
+            return utils.gen_error("ID picture does not exist", 400)
+
+        with open(picture_path, "rb") as f:
+            baseline_bytes = f.read()
 
         try:
             comparison = _compare_face_bytes(baseline_bytes, pre_test_bytes)
@@ -297,6 +300,7 @@ class PreTestFace(Resource):
         picture.pre_conf = comparison["confidence"]
         db.session.add(picture)
 
+        ## END REPLACE HERE
         log_entry = _latest_log_entry(examinee.id)
         if log_entry:
             log_entry.exam_time_in = datetime.now()
@@ -341,23 +345,22 @@ class PostTestFace(Resource):
         args = posttest_parser.parse_args()
         examinee_id, examinee, error = _get_authenticated_examinee_or_error(user)
         if error:
-            # print(f"[/posttest] examinee_id={examinee_id} not found")
             return error
 
         picture = _latest_picture_session(examinee.id)
         if picture is None:
-            # print(f"[/posttest] examinee_id={examinee_id} has no pre_test row")
             return utils.gen_error("No pre-test session found for examinee", 400)
 
         post_test_bytes = args.get('file').read()
         if not post_test_bytes:
             return utils.gen_error("No post-test image provided", 400)
 
-        try:
-            baseline_bytes = _read_examinee_baseline(examinee)
-        except FileNotFoundError:
-            # print(f"[/posttest] examinee_id={examinee_id} baseline picture missing on disk: {examinee.picture}")
-            return utils.gen_error("Examinee baseline picture not found on disk", 400)
+        picture_path = os.path.join(current_app.config['UPLOAD_FOLDER'], examinee.picture)
+        if not os.path.exists(picture_path):
+            return utils.gen_error("ID picture does not exist", 400)
+
+        with open(picture_path, "rb") as f:
+            baseline_bytes = f.read()
 
         try:
             comparison = _compare_face_bytes(baseline_bytes, post_test_bytes)
@@ -375,7 +378,6 @@ class PostTestFace(Resource):
 
         allowed = comparison["match"]
         post_conf = comparison["confidence"]
-        # print(f"[/posttest] examinee_id={examinee_id} picture_id={picture.id} match={allowed} post_conf={post_conf}")
 
         if not allowed:
             return utils.gen_error("Faces do not match", 403)
