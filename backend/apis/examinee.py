@@ -275,15 +275,11 @@ class PreTestFace(Resource):
         try:
             comparison = _compare_face_bytes(baseline_bytes, pre_test_bytes)
         except Exception as exc:
-            # print(f"[/pretest] examinee_id={examinee_id} compare error: {exc}")
-            return {
-                "error": "Face comparison failed",
-                "data": {
-                    "allowed": False,
-                    "pre_conf": None,
-                    "compare_error": str(exc),
-                },
-            }, 400
+            return utils.gen_error("Face comparison failed", {
+                "allowed": False,
+                "pre_conf": None,
+                "compare_error": str(exc),
+            })
 
         picture = _latest_picture_session(examinee.id)
         if picture is None:
@@ -309,10 +305,9 @@ class PreTestFace(Resource):
 
         allowed = comparison["match"]
         pre_conf = comparison["confidence"]
-        # print(f"[/pretest] examinee_id={examinee_id} picture_id={picture.id} match={allowed} pre_conf={pre_conf}")
 
         if not allowed:
-            return utils.gen_error("Faces do not match")
+            return utils.gen_error("Faces do not match", 403)
 
         return utils.gen_success_message("Timein Success", {
             "allowed": allowed,
