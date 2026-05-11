@@ -104,7 +104,7 @@ class Auth(Resource):
             # "token":            jwt_token,
             "errors":         errors,
         }))
-        print(jwt_token)
+
         success_response.set_cookie(
             'token',
             jwt_token,
