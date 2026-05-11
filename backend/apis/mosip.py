@@ -93,6 +93,9 @@ class Auth(Resource):
         errors          = body.get("errors")
         jwt_token       = generate_jwt({'uin': uin, 'name': name})
 
+        if not auth_status: 
+            return utils.gen_error(errors, 403)
+
         success_response = make_response(utils.gen_success_message("auth complete", {
             "uin":            uin,
             "name":           name,
