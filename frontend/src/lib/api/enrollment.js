@@ -73,7 +73,6 @@ export async function enrollExaminee(qrImage) {
     const examinee_form_data = new FormData()
     examinee_form_data.append('file', picture_file)
     examinee_form_data.append('name', examinee_name)
-    examinee_form_data.append('id', examinee_id)
 
     const new_examinee_response = await fetch(`${apiBaseUrl}/examinee/`, {
         method: 'POST',
