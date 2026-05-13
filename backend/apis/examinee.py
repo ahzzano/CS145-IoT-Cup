@@ -89,7 +89,6 @@ def _latest_log_entry(examinee_id: int):
 
 examinee_parser_creator = reqparse.RequestParser()
 examinee_parser_creator.add_argument('file', location='files', type=FileStorage, required=True)
-examinee_parser_creator.add_argument('name', location='form', type=str, required=True)
 
 @api.route('/')
 class GetExaminee(Resource):
@@ -113,9 +112,7 @@ class GetExaminee(Resource):
         if not file:
             return utils.gen_error("No file provided", 400)
 
-        name = args.get('name')
-        if not name:
-            return utils.gen_error("No name provided", 400)
+        name = user['name']
 
         requested_id = int(user['uin'])
         if requested_id:
