@@ -26,7 +26,7 @@ def auth_required(f):
     def decorated(*args, **kwargs):
         token = request.cookies.get('token') or request.headers.get('Authorization', '').replace('Bearer ', '')
         if bypassed():
-            return f({'uin': 1, 'name': 'bypasee'}, *args, **kwargs)
+            return f({'uin': 271670, 'name': 'Charlie Kirk'}, *args, **kwargs)
 
         if not token:
             return utils.gen_error("Token is missing", 401)

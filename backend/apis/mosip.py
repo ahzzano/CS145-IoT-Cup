@@ -14,12 +14,15 @@ from models.examinee import Examinee
 from models.base import db
 import utils
 import auth
+import threading
+import time
 
 api = Namespace("mosip", description="All MOSIP related requests")
 
 config = Dynaconf(settings_files=["./mosip_config.toml"], environments=False)
 authenticator = MOSIPAuthenticator(config=config)
 
+MAX_RETRIES = 10
 PHOTO_DIR = "serve/" # change this to where photos will be saved
 
 # ── Shared helper ───
@@ -53,6 +56,25 @@ qr_parser.add_argument(
 )
 
 # ── POST /mosip/auth ──
+def call_mosip_auth(uin, name, result, attempt):
+    print(f'Auth attempt {attempt}')
+    demographics_data = DemographicsModel(
+        name=[{"language": "eng", "value": name}],
+    )
+
+    try:
+        response = authenticator.auth(
+            individual_id=uin,
+            individual_id_type="UIN",
+            demographic_data=demographics_data,
+            consent=True,
+        )
+        result['response'] = response
+
+    except Exception as e:
+        result['error'] = 'unable to connect'
+
+
 @api.route("/auth")
 class Auth(Resource):
     @api.expect(qr_parser)
@@ -96,13 +118,38 @@ class Auth(Resource):
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],
         )
+
+        response = None
  
-        response = authenticator.auth(
-            individual_id=uin,
-            individual_id_type="UIN",
-            demographic_data=demographics_data,
-            consent=True,
-        )
+        for attempt in range(1, MAX_RETRIES + 1):
+            result = {}
+            thread  = threading.Thread(
+                        target=call_mosip_auth,
+                        args=(uin, name, result, attempt)
+                    )
+            thread.start()
+            thread.join(timeout=45)
+
+            if thread.is_alive():
+                if attempt == MAX_RETRIES:
+                    return utils.gen_error("MOSIP Auth Timed Out", 504)
+                time.sleep(1)
+                
+                continue
+
+            if "error" in result:
+                return utils.gen_error("MOSIP Auth Failed", 502)
+            
+            response = result.get('response')
+            break
+
+        # response = authenticator.auth(
+        #     individual_id=uin,
+        #     individual_id_type="UIN",
+        #     demographic_data=demographics_data,
+        #     consent=True,
+        #     timeout=60
+        # )
 
         if not response.ok:
             return utils.gen_error("MOSIP auth request failed", 502)
@@ -150,6 +197,13 @@ class KYC(Resource):
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],
         )
+
+        if auth.bypassed():
+            return utils.gen_success_message("bypassed", {
+                    'name': 'Charlie Kirk',
+                    'uin': 271670,
+                    'photo_path': 'we_are_charlie_kirk.png'
+                })
  
         response = authenticator.kyc(
             individual_id=uin,
