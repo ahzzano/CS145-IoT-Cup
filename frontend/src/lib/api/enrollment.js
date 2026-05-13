@@ -6,6 +6,10 @@ const DEFAULT_API_BASE_URL = '/api';
  * @typedef {EnrollmentSuccess | EnrollmentError} EnrollmentResponse
  */
 
+/**
+ * @param {string} img_path
+ * @returns {Promise<Blob | null>}
+ */
 async function getExamineeImage(img_path) {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
     console.log(`${apiBaseUrl}/${img_path}`)
@@ -47,6 +51,30 @@ export async function enrollExaminee(qrImage) {
 
     const examinee_id = auth_json.data.uin
 
+    const existing_examinee_response = await fetch(
+        `${apiBaseUrl}/examinee/?id=${encodeURIComponent(examinee_id)}`,
+        {
+            method: 'GET',
+            cache: 'no-store',
+            credentials: 'include'
+        }
+    )
+
+    if (existing_examinee_response.ok) {
+        return {
+            success: false,
+            error: 'User already enrolled'
+        };
+    }
+
+    if (existing_examinee_response.status !== 404) {
+        const existing_examinee_json = await existing_examinee_response.json().catch(() => ({}))
+        return {
+            success: false,
+            error: existing_examinee_json?.error || 'Unable to check enrollment status.'
+        };
+    }
+
     const kyc_response = await fetch(`${apiBaseUrl}/mosip/kyc`, {
         method: 'GET',
         cache: 'no-store',
@@ -68,6 +96,13 @@ export async function enrollExaminee(qrImage) {
     console.log(examinee_picture_fname)
 
     const picture_blob = await getExamineeImage(examinee_picture)
+    if (!picture_blob) {
+        return {
+            success: false,
+            error: 'Unable to retrieve the verified examinee photo.'
+        };
+    }
+
     const picture_file = new File([picture_blob], examinee_picture_fname, {type: picture_blob.type})
 
     const examinee_form_data = new FormData()
@@ -82,10 +117,12 @@ export async function enrollExaminee(qrImage) {
         credentials: 'include'
     })
 
+    const new_examinee_json = await new_examinee_response.json().catch(() => ({}))
+
     if(!new_examinee_response.ok) {
         return {
             success: false,
-            error: auth_json?.error || 'Unable to enroll. Please try again.'
+            error: new_examinee_json?.error || 'Unable to enroll. Please try again.'
         };
     }
 

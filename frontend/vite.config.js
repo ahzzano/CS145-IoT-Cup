@@ -10,14 +10,14 @@ export default defineConfig({
         },
         watch: {
             usePolling: false
-        }
-    },
-    proxy: {
-        '/api': {
-            target: 'http://localhost:8000',
-            changeOrigin: true,
-            cookieDomainRewrite: 'localhost',
-            cookiePathRewrite: '/',
+        },
+        proxy: {
+            '/api': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+                cookieDomainRewrite: 'localhost',
+                cookiePathRewrite: '/',
+            }
         }
     }
 });
