@@ -13,6 +13,7 @@ from auth import auth_required, generate_jwt
 from models.examinee import Examinee
 from models.base import db
 import utils
+import auth
 
 api = Namespace("mosip", description="All MOSIP related requests")
 
@@ -56,8 +57,9 @@ qr_parser.add_argument(
 class Auth(Resource):
     @api.expect(qr_parser)
     @api.doc(responses={
-        200: "Returns auth_status: true/false",
+        200: "Authenticated",
         400: "No QR code found or could not parse ID",
+        403: "Auth failed",
         502: "MOSIP request failed",
     })
     def post(self):
@@ -67,6 +69,25 @@ class Auth(Resource):
         qr_data = read_qr(args.get("file"))
         if not qr_data:
             return utils.gen_error("No QR code found in image", 400)
+
+        if auth.bypassed():
+            jwt_token       = generate_jwt({'uin': 1, 'name': 'bypasee'})
+            success_response = make_response(utils.gen_success_message("auth complete", {
+                "uin":              1,
+                "name":             'bypasee',
+                "auth_status":      True,
+                "transaction_id":   2342,
+                # "token":            jwt_token,
+                "errors":           [],
+            }))
+
+            success_response.set_cookie(
+                'token',
+                jwt_token,
+                samesite='Lax'
+            )
+
+            return success_response
 
         uin, name = parse_national_id_qr(qr_data)
         if not uin or not name:

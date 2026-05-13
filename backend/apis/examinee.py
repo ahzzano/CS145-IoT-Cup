@@ -1,5 +1,6 @@
 from datetime import datetime
 import importlib.util
+import io
 import os
 import tempfile
 from pathlib import Path
@@ -18,6 +19,10 @@ from models.examinee import *
 from models.examinee_picture import ExamineePicture
 from models.logs import LogEntry
 
+from facerec import compare_images
+import numpy as np
+from PIL import Image
+
 import utils
 
 api = Namespace("examinee", description='All API endpoints for Examinees')
@@ -35,6 +40,12 @@ def _compare_face_bytes(baseline: bytes, candidate: bytes) -> dict:
         cand_f.write(candidate); cand_f.flush()
         return compare_images.compare_faces(base_f.name, cand_f.name)
 
+
+def compare_faces(a: bytes, b: bytes) -> dict: 
+    a_img_pillow = np.array(Image.open(io.BytesIO(a)).convert("RGB"))
+    b_img_pillow = np.array(Image.open(io.BytesIO(b)).convert("RGB"))
+
+    return compare_images.compare_faces_2(a_img_pillow, b_img_pillow)
 
 def _read_examinee_baseline(examinee) -> bytes:
     pic_path = os.path.join(current_app.config['UPLOAD_FOLDER'], examinee.picture)
@@ -362,10 +373,7 @@ class PostTestFace(Resource):
         with open(picture_path, "rb") as f:
             baseline_bytes = f.read()
 
-        try:
-            comparison = _compare_face_bytes(baseline_bytes, post_test_bytes)
-        except Exception as exc:
-            return utils.gen_error("Face comparison failed", 400)
+        comparison = compare_faces(baseline_bytes, post_test_bytes)
 
         picture.post_test = post_test_bytes
         picture.post_conf = comparison["confidence"]
@@ -382,7 +390,7 @@ class PostTestFace(Resource):
         if not allowed:
             return utils.gen_error("Faces do not match", 403)
 
-        return utils.gen_success_message("Facial match detected", {
+        return utils.gen_success_message("Timeout Success", {
             "allowed": allowed,
             "post_conf": post_conf,
             "min_confidence": comparison["min_confidence"],
