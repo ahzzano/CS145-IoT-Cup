@@ -87,25 +87,19 @@ def _latest_log_entry(examinee_id: int):
         .first()
     )
 
-examinee_parser = reqparse.RequestParser()
-examinee_parser.add_argument('id', type=int, help='id of the user', location='args')
-
 examinee_parser_creator = reqparse.RequestParser()
 examinee_parser_creator.add_argument('file', location='files', type=FileStorage, required=True)
 examinee_parser_creator.add_argument('name', location='form', type=str, required=True)
-examinee_parser_creator.add_argument('id', type=int,location='form')
 
 @api.route('/')
 class GetExaminee(Resource):
-    @api.expect(examinee_parser)
+    method_decorators = [auth_required]
+
     @api.doc(responses={400: "Missing ID Parameter", 404:"Examinee does not exist", 200: "Returns examinee"})
-    def get(self):
-        args = examinee_parser.parse_args()
+    def get(self, user):
+        id = int(user['uin'])
 
-        id = args.get('id')
-        if id is None:
-            return utils.gen_error("Missing ID Parameter", 400)
-
+        print('what?')
         user = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
         if user is None:
             return utils.gen_error("Examinee does not exist", 404)
@@ -113,7 +107,7 @@ class GetExaminee(Resource):
     
     @api.expect(examinee_parser_creator)
     @api.doc(responses={400: "Missing parameters", 200: "Returns new user"})
-    def post(self):
+    def post(self, user):
         args = examinee_parser_creator.parse_args()
         file = args.get('file')
         if not file:
@@ -123,7 +117,7 @@ class GetExaminee(Resource):
         if not name:
             return utils.gen_error("No name provided", 400)
 
-        requested_id = args.get('id')
+        requested_id = int(user['uin'])
         if requested_id:
             existing = db.session.execute(db.select(Examinee).filter_by(id=requested_id)).first()
             if existing:
@@ -157,14 +151,9 @@ class GetExaminee(Resource):
 
         return utils.gen_success_message("new user created", examinee.to_dict())
     
-    @api.expect(examinee_parser)
     @api.doc(responses={400: "Missing ID Parameter", 404:"Examinee does not exist", 200: "Returns success"})
-    def delete(self):
-        args = examinee_parser.parse_args()
-        id = args.get('id')
-        if id is None:
-            return utils.gen_error("Missing ID", 400)
-            # abort(HTTPStatus.BAD_REQUEST, "Missing ID Parameter")
+    def delete(self, user):
+        id = int(user['uin'])
 
         examinee = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
         db.session.commit()

@@ -120,9 +120,7 @@ class Auth(Resource):
         success_response = make_response(utils.gen_success_message("auth complete", {
             "uin":            uin,
             "name":           name,
-            "auth_status":    auth_status,
-            "transaction_id": transaction_id,
-            # "token":            jwt_token,
+            "token":            jwt_token,
             "errors":         errors,
         }))
 
