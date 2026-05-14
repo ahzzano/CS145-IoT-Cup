@@ -255,7 +255,7 @@ class PostTestFace(Resource):
         picture.post_test = post_test_bytes
         picture.post_conf = comparison["confidence"]
 
-        log_entry = _latest_log_entry(examinee.id)
+        log_entry = _latest_log_entry(examinee_id)
         if log_entry:
             log_entry.exam_time_out = datetime.now()
 

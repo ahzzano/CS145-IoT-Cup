@@ -46,6 +46,7 @@ def compare_faces_2(a: np.ndarray, b: np.ndarray) -> dict:
     distance = float(result["distance"])
     threshold = float(result["threshold"])
     confidence = max(0.0, min(100.0, (1.0 - distance / (2.0 * threshold)) * 100.0))
+    print(f'Confidence: {confidence}, Distance: {distance}, Threshold: {threshold}')
 
     return {
         "match": confidence >= MIN_CONFIDENCE,
