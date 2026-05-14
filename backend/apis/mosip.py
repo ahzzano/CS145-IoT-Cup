@@ -13,12 +13,16 @@ from auth import auth_required, generate_jwt
 from models.examinee import Examinee
 from models.base import db
 import utils
+import auth
+import threading
+import time
 
 api = Namespace("mosip", description="All MOSIP related requests")
 
 config = Dynaconf(settings_files=["./mosip_config.toml"], environments=False)
 authenticator = MOSIPAuthenticator(config=config)
 
+MAX_RETRIES = 10
 PHOTO_DIR = "serve/" # change this to where photos will be saved
 
 # ── Shared helper ───
@@ -52,12 +56,32 @@ qr_parser.add_argument(
 )
 
 # ── POST /mosip/auth ──
+def call_mosip_auth(uin, name, result, attempt):
+    print(f'Auth attempt {attempt}')
+    demographics_data = DemographicsModel(
+        name=[{"language": "eng", "value": name}],
+    )
+
+    try:
+        response = authenticator.auth(
+            individual_id=uin,
+            individual_id_type="UIN",
+            demographic_data=demographics_data,
+            consent=True,
+        )
+        result['response'] = response
+
+    except Exception as e:
+        result['error'] = 'unable to connect'
+
+
 @api.route("/auth")
 class Auth(Resource):
     @api.expect(qr_parser)
     @api.doc(responses={
-        200: "Returns auth_status: true/false",
+        200: "Authenticated",
         400: "No QR code found or could not parse ID",
+        403: "Auth failed",
         502: "MOSIP request failed",
     })
     def post(self):
@@ -68,6 +92,25 @@ class Auth(Resource):
         if not qr_data:
             return utils.gen_error("No QR code found in image", 400)
 
+        if auth.bypassed():
+            jwt_token       = generate_jwt({'uin': 1, 'name': 'bypasee'})
+            success_response = make_response(utils.gen_success_message("auth complete", {
+                "uin":              1,
+                "name":             'bypasee',
+                "auth_status":      True,
+                "transaction_id":   2342,
+                # "token":            jwt_token,
+                "errors":           [],
+            }))
+
+            success_response.set_cookie(
+                'token',
+                jwt_token,
+                samesite='Lax'
+            )
+
+            return success_response
+
         uin, name = parse_national_id_qr(qr_data)
         if not uin or not name:
             return utils.gen_error("Could not parse UIN and name from QR code", 400)
@@ -75,13 +118,38 @@ class Auth(Resource):
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],
         )
+
+        response = None
  
-        response = authenticator.auth(
-            individual_id=uin,
-            individual_id_type="UIN",
-            demographic_data=demographics_data,
-            consent=True,
-        )
+        for attempt in range(1, MAX_RETRIES + 1):
+            result = {}
+            thread  = threading.Thread(
+                        target=call_mosip_auth,
+                        args=(uin, name, result, attempt)
+                    )
+            thread.start()
+            thread.join(timeout=45)
+
+            if thread.is_alive():
+                if attempt == MAX_RETRIES:
+                    return utils.gen_error("MOSIP Auth Timed Out", 504)
+                time.sleep(1)
+                
+                continue
+
+            if "error" in result:
+                return utils.gen_error("MOSIP Auth Failed", 502)
+            
+            response = result.get('response')
+            break
+
+        # response = authenticator.auth(
+        #     individual_id=uin,
+        #     individual_id_type="UIN",
+        #     demographic_data=demographics_data,
+        #     consent=True,
+        #     timeout=60
+        # )
 
         if not response.ok:
             return utils.gen_error("MOSIP auth request failed", 502)
@@ -93,15 +161,16 @@ class Auth(Resource):
         errors          = body.get("errors")
         jwt_token       = generate_jwt({'uin': uin, 'name': name})
 
+        if not auth_status: 
+            return utils.gen_error(errors, 403)
+
         success_response = make_response(utils.gen_success_message("auth complete", {
             "uin":            uin,
             "name":           name,
-            "auth_status":    auth_status,
-            "transaction_id": transaction_id,
-            # "token":            jwt_token,
+            "token":            jwt_token,
             "errors":         errors,
         }))
-        print(jwt_token)
+
         success_response.set_cookie(
             'token',
             jwt_token,
@@ -124,6 +193,13 @@ class KYC(Resource):
         """Fetch full KYC data and save ID photo — scans QR code from uploaded National ID image."""
         uin: str = user['uin']
         name: str = user['name']
+
+        if auth.bypassed():
+            return utils.gen_success_message("bypassed", {
+                'name': 'Charlie Kirk',
+                'uin': 271670,
+                'photo_path': 'we_are_charlie_kirk.jpg'
+            })
 
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],

@@ -13,6 +13,7 @@ api = Namespace('exam', description="All exam related API calls")
 
 link_exam =  reqparse.RequestParser()
 link_exam.add_argument('exam_id', location='form', type=int, required=True)
+link_exam.add_argument('examinee', location='form', type=int, required=True)
 
 args_link_exam =  reqparse.RequestParser()
 args_link_exam.add_argument('examinee', location='args', type=int, required=True)
@@ -31,7 +32,7 @@ class ExamLinker(Resource):
         args = link_exam.parse_args()
 
         print(user)
-        examinee_id = int(user['uin'])
+        examinee_id = int(args.get('examinee'))
         exam_id = args.get('exam_id')
 
         examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
@@ -83,9 +84,12 @@ class ExamUnlinker(Resource):
     @api.expect(link_exam)
     def post(self):
         args = link_exam.parse_args()
-        exam_id = args.get('exam_id')
 
-        exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_id)).first()
+        # exam_id = args.get('exam_id')
+        #
+        # exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_id)).first()
+        examinee = int(args.get('examinee'))
+        exam_kit = db.session.execute(db.select(ExamKit).filter_by(examinee_id=examinee)).first()
 
         db.session.commit()
 
@@ -100,12 +104,18 @@ class ExamUnlinker(Resource):
         return ek.to_dict(), 200
 
 
+submit_exam_parser =  reqparse.RequestParser()
+submit_exam_parser.add_argument('examinee', location='form', type=int, required=True)
 @api.route('/submit')
 class submit_exam(Resource):
-    method_decorators = [auth_required]
-    def post(self, user):
+    @api.expect(submit_exam_parser)
+    def post(self):
         "Submit an exam"
-        examinee_id = int(user['uin'])
+        args = submit_exam_parser.parse_args()
+        examinee_id = args.get('examinee')
+
+        if examinee_id is None:
+            return utils.gen_error("Missing value \"examinee\"", 400)
 
         exam_kit = db.session.execute(
                 db.select(ExamKit).filter_by(examinee_id=examinee_id)

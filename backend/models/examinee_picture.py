@@ -5,7 +5,7 @@ from models.base import db
 class ExamineePicture(db.Model):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, init=False)
     pre_test: Mapped[bytes] = mapped_column(LargeBinary)
-    examinee_id: Mapped[int] = mapped_column(ForeignKey("examinee.id"))
+    examinee_id: Mapped[int] = mapped_column(ForeignKey("examinee.id", ondelete='CASCADE'))
     post_test: Mapped[bytes] = mapped_column(LargeBinary, default=b'')
     pre_conf: Mapped[float] = mapped_column(default=0.0)
     post_conf: Mapped[float] = mapped_column(default=0.0)
