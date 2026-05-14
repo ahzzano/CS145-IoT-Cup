@@ -12,6 +12,7 @@ from werkzeug.datastructures import FileStorage
 from auth import auth_required, generate_jwt
 from models.examinee import Examinee
 from models.base import db
+from apis.examinee import task_queue
 import utils
 import auth
 import threading
@@ -49,9 +50,14 @@ def parse_national_id_qr(qr_data: str) -> tuple[str, str] | tuple[None, None]:
         return None, None
 
 # ── Parsers ──
-uin_parser = reqparse.RequestParser()
-uin_parser.add_argument("uin", location="form", type=int, required=True)
-uin_parser.add_argument("name", location="form", type=str, required=True)
+qr_string_parser = reqparse.RequestParser()
+qr_string_parser.add_argument("qr_data", location="form", type=str, required=True,)
+
+qr_parser = reqparse.RequestParser()
+qr_parser.add_argument(
+    "file", location="files", type=FileStorage, required=True,
+    help="Image of the National ID QR code"
+)
 
 # ── POST /mosip/auth ──
 def call_mosip_auth(uin, name, result, attempt):
@@ -62,7 +68,7 @@ def call_mosip_auth(uin, name, result, attempt):
 
     try:
         response = authenticator.auth(
-            individual_id=str(uin),
+            individual_id=uin,
             individual_id_type="UIN",
             demographic_data=demographics_data,
             consent=True,
@@ -76,7 +82,7 @@ def call_mosip_auth(uin, name, result, attempt):
 
 @api.route("/auth")
 class Auth(Resource):
-    @api.expect(uin_parser)
+    @api.expect(qr_parser)
     @api.doc(responses={
         200: "Authenticated",
         400: "No QR code found or could not parse ID",
@@ -85,13 +91,21 @@ class Auth(Resource):
     })
     def post(self):
         """Yes/no identity verification — scans QR code from uploaded National ID image."""
-        args = uin_parser.parse_args()
+        args = qr_parser.parse_args()
+        
+        qr_data = read_qr(args.get("file"))
+        if not qr_data:
+            return utils.gen_error("No QR code found in image", 400)
+        
+        uin, name = parse_national_id_qr(qr_data)
+        if not uin or not name:
+            return utils.gen_error("Could not parse UIN and name from QR code", 400)
 
         if auth.bypassed():
-            jwt_token       = generate_jwt({'uin': 1, 'name': 'bypasee'})
+            jwt_token       = generate_jwt({'uin': args.get('uin'), 'name': args.get('name')})
             success_response = make_response(utils.gen_success_message("auth complete", {
-                "uin":              1,
-                "name":             'bypasee',
+                "uin":              args.get('uin'),
+                "name":             args.get('name'),
                 "auth_status":      True,
                 "transaction_id":   2342,
                 # "token":            jwt_token,
@@ -105,11 +119,6 @@ class Auth(Resource):
             )
 
             return success_response
-
-        uin = args.get('uin')
-        name = args.get('name')
-        if not uin or not name:
-            return utils.gen_error("Could not parse UIN and name from QR code", 400)
 
         response = None
         for attempt in range(1, MAX_RETRIES + 1):
@@ -158,7 +167,7 @@ class Auth(Resource):
         success_response = make_response(utils.gen_success_message("auth complete", {
             "uin":            uin,
             "name":           name,
-            "token":            jwt_token,
+            "token":          jwt_token,
             "errors":         errors,
         }))
 
@@ -169,6 +178,82 @@ class Auth(Resource):
         )
 
         return  success_response
+
+# ── POST /mosip/auth/enrolled ──
+@api.route("/auth/enrolled")
+class Auth(Resource):
+    @api.expect(qr_string_parser)
+    @api.doc(responses={
+        200: "Authenticated and on roster",
+        400: "Missing or unparseable QR data",
+        403: "MOSIP auth failed or not on roster",
+        502: "MOSIP request failed",
+        504: "MOSIP timed out",
+    })
+    def post(self):
+        while not task_queue.empty():
+            task_queue.get()
+        args = qr_string_parser.parse_args()
+        qr_data = args.get("qr_data")
+        # ── Parse QR string ──
+        uin, name = parse_national_id_qr(qr_data)
+        if not uin or not name:
+            return {}, 400
+ 
+        # ── Bypass mode ───
+        if auth.bypassed():
+            examinee = db.session.execute(
+                db.select(Examinee).filter_by(id=int(uin))
+            ).first()
+            if examinee is None:
+                return {}, 403
+            task_queue.put(int(uin))
+            task_queue.put(int(uin))
+            return {}, 200
+ 
+        # ── MOSIP auth (with retries) ───
+        response = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            result = {}
+            thread = threading.Thread(
+                target=call_mosip_auth,
+                args=(uin, name, result, attempt)
+            )
+            thread.start()
+            thread.join(timeout=45)
+ 
+            if thread.is_alive():
+                if attempt == MAX_RETRIES:
+                    return {}, 504
+                time.sleep(1)
+                continue
+ 
+            if "error" in result:
+                return {}, 502
+ 
+            response = result.get('response')
+            break
+ 
+        if not response.ok:
+            return {}, 502
+ 
+        body        = response.json()
+        auth_status = body.get("response", {}).get("authStatus", False)
+        errors      = body.get("errors")
+ 
+        if not auth_status:
+            return {}, 403
+ 
+        # ── Roster check ───
+        examinee = db.session.execute(
+            db.select(Examinee).filter_by(id=int(uin))
+        ).first()
+        if examinee is None:
+            return {}, 403
+ 
+        task_queue.put(int(uin))
+        task_queue.put(int(uin))
+        return {}, 200
 
 # ── POST /mosip/kyc ──
 @api.route("/kyc")

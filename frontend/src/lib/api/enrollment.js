@@ -1,62 +1,5 @@
-import jsQR from 'jsqr';
-
 // const DEFAULT_API_BASE_URL = '/api';
 const DEFAULT_API_BASE_URL = 'http://localhost:8000'
-
-// ── QR helpers ──────────────────────────────────────
- 
-/**
- * Decodes a QR code from an image File/Blob.
- * @param {File | Blob} imageFile
- * @returns {Promise<string | null>}
- */
-async function readQR(imageFile) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        const url = URL.createObjectURL(imageFile);
- 
-        img.onload = () => {
-            URL.revokeObjectURL(url);
- 
-            const canvas = document.createElement('canvas');
-            canvas.width  = img.naturalWidth;
-            canvas.height = img.naturalHeight;
- 
-            const ctx = canvas.getContext('2d');
-            // @ts-ignore
-            ctx.drawImage(img, 0, 0);
- 
-            // @ts-ignore
-            const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(data, width, height);
- 
-            resolve(code?.data ?? null);
-        };
- 
-        img.onerror = () => {
-            URL.revokeObjectURL(url);
-            resolve(null);
-        };
- 
-        img.src = url;
-    });
-}
- 
-/**
- * Parses the decoded QR string from a Philippine National ID.
- * @param {string} qrData
- * @returns {{ uin: string; name: string } | null}
- */
-function parseNationalIdQR(qrData) {
-    try {
-        const { uin, name } = JSON.parse(qrData);
-        if (!uin || !name) return null;
-        return { uin, name };
-    } catch {
-        return null;
-    }
-}
-
 /**
  * @typedef {{ success: true; message: string; examinee_id: string }} EnrollmentSuccess
  * @typedef {{ success: false; error: string }} EnrollmentError
@@ -79,7 +22,6 @@ async function getExamineeImage(img_path) {
     }
 }
 
-
 /**
  * Sends QR image for enrollment validation and registration.
  * @param {File} qrImage
@@ -89,18 +31,6 @@ export async function enrollExaminee(qrImage) {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;   
     const auth_form_data = new FormData();
     auth_form_data.append('file', qrImage);
-    
-    const qrData = await readQR(qrImage);
-    if (!qrData) {
-        return { success: false, error: 'No QR code detected in the provided image.' };
-    }
-    const parsed = parseNationalIdQR(qrData);
-    console.log(parsed);
-    if (!parsed) {
-        return { success: false, error: 'QR code does not contain valid National ID data.' };
-    }
-    auth_form_data.append("name", parsed.name);
-    auth_form_data.append("uin", parsed.uin);
 
     const auth_response = await fetch(`${apiBaseUrl}/mosip/auth`, {
         method: 'POST',
@@ -118,7 +48,7 @@ export async function enrollExaminee(qrImage) {
         };
     }
 
-    const examinee_id = parsed.uin
+    const examinee_id = auth_json.data.uin
 
     const existing_examinee_response = await fetch(
         `${apiBaseUrl}/examinee/?id=${encodeURIComponent(examinee_id)}`,

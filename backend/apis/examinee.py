@@ -182,8 +182,6 @@ class GetExaminee(Resource):
 
 pretest_parser = reqparse.RequestParser()
 pretest_parser.add_argument('file', location='files', type=FileStorage, required=True)
-pretest_parser.add_argument('id', location='form', type=int, required=True)
-
 @api.route('/timein')
 class PreTestFace(Resource):
     @api.expect(pretest_parser)
@@ -196,7 +194,9 @@ class PreTestFace(Resource):
         })
     def post(self):
         args = pretest_parser.parse_args()
-        examinee_id = int(args.get('id'))
+        if task_queue.empty():
+            return utils.gen_error("No examinee in queue", 400)
+        examinee_id = int(task_queue.get())
         examinee, error = _get_authenticated_examinee_or_error(examinee_id)
         if error:
             return error
@@ -264,7 +264,9 @@ class PostTestFace(Resource):
     })
     def post(self):
         args = pretest_parser.parse_args()
-        examinee_id = int(args.get('id'))
+        if task_queue.empty():
+            return utils.gen_error("No examinee in queue", 400)
+        examinee_id = int(task.queue.get())
         examinee, error = _get_authenticated_examinee_or_error(examinee_id)
 
         if error:
