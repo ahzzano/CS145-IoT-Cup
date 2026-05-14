@@ -151,8 +151,6 @@ pretest_parser.add_argument('id', location='form', type=int, required=True)
 
 @api.route('/timein')
 class PreTestFace(Resource):
-    method_decorators = [auth_required]
-
     @api.expect(pretest_parser)
     @api.doc(responses={
             400: "Missing image or examinee baseline",
@@ -161,7 +159,7 @@ class PreTestFace(Resource):
             404: "Examinee does not exist",
             200: "Face match"
         })
-    def post(self, user):
+    def post(self):
         args = pretest_parser.parse_args()
         examinee_id = int(args.get('id'))
         examinee, error = _get_authenticated_examinee_or_error(examinee_id)
@@ -221,8 +219,6 @@ class PreTestFace(Resource):
 
 @api.route('/timeout')
 class PostTestFace(Resource):
-    method_decorators = [auth_required]
-
     @api.expect(pretest_parser)
     @api.doc(responses={
         400: "Missing image or no pre-test row",
@@ -231,7 +227,7 @@ class PostTestFace(Resource):
         404: "Examinee does not exist",
         200: "Face match"
     })
-    def post(self, user):
+    def post(self):
         args = pretest_parser.parse_args()
         examinee_id = int(args.get('id'))
         examinee, error = _get_authenticated_examinee_or_error(examinee_id)
