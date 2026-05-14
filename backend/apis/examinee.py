@@ -79,6 +79,7 @@ class AddExamineeQueue(Resource):
             return utils.gen_error("No UIN provided", 400)
 
         user = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
+
         if user is None:
             return utils.gen_error("Examinee does not exist", 403)
         
@@ -89,8 +90,10 @@ class AddExamineeQueue(Resource):
 @api.route('/clear_queue/')
 class ClearExamineeQueue(Resource):
     def get(self):
+        print('Clearing Queue')
         while not task_queue.empty():
-            task_queue.get()
+            item = task_queue.get()
+            print(f'Item: {item}')
 
         return utils.gen_success_message("Cleared queue", {})
 
