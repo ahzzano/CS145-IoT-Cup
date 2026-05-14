@@ -197,7 +197,7 @@ class KYC(Resource):
         )
  
         response = authenticator.kyc(
-            individual_id=uin,
+            individual_id= str(uin),
             individual_id_type="UIN",
             demographic_data=demographics_data,
             consent=True,
