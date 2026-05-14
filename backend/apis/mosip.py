@@ -194,16 +194,16 @@ class KYC(Resource):
         uin: str = user['uin']
         name: str = user['name']
 
+        if auth.bypassed():
+            return utils.gen_success_message("bypassed", {
+                'name': 'Charlie Kirk',
+                'uin': 271670,
+                'photo_path': 'we_are_charlie_kirk.jpg'
+            })
+
         demographics_data = DemographicsModel(
             name=[{"language": "eng", "value": name}],
         )
-
-        if auth.bypassed():
-            return utils.gen_success_message("bypassed", {
-                    'name': 'Charlie Kirk',
-                    'uin': 271670,
-                    'photo_path': 'we_are_charlie_kirk.png'
-                })
  
         response = authenticator.kyc(
             individual_id=uin,

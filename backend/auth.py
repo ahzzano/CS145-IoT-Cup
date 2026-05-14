@@ -34,7 +34,7 @@ def auth_required(f):
         try:
             data = jwt.decode(token, SECRET_KEY, algorithms='HS256')
             user = {
-                    'uin': data['uin'],
+                    'uin': int(data['uin']),
                     'name': data['name']
                     }
         except jwt.ExpiredSignatureError:

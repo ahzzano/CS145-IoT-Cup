@@ -12,7 +12,7 @@ from werkzeug.datastructures import FileStorage
 
 from flask_restx import Namespace, Resource, abort, reqparse
 
-from auth import auth_required
+from auth import auth_required, bypassed
 from logs import on_examinee_creation
 from models.exam_kit import ExamKit
 from models.examinee import *
@@ -27,31 +27,11 @@ import utils
 
 api = Namespace("examinee", description='All API endpoints for Examinees')
 
-
-def _compare_face_bytes(baseline: bytes, candidate: bytes) -> dict:
-    module_path = Path(__file__).resolve().parents[1] / "face-recognition" / "compare_images.py"
-    spec = importlib.util.spec_from_file_location("compare_images", module_path)
-    compare_images = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(compare_images)
-
-    with tempfile.NamedTemporaryFile(suffix=".jpg") as base_f, \
-         tempfile.NamedTemporaryFile(suffix=".jpg") as cand_f:
-        base_f.write(baseline); base_f.flush()
-        cand_f.write(candidate); cand_f.flush()
-        return compare_images.compare_faces(base_f.name, cand_f.name)
-
-
 def compare_faces(a: bytes, b: bytes) -> dict: 
     a_img_pillow = np.array(Image.open(io.BytesIO(a)).convert("RGB"))
     b_img_pillow = np.array(Image.open(io.BytesIO(b)).convert("RGB"))
 
     return compare_images.compare_faces_2(a_img_pillow, b_img_pillow)
-
-def _read_examinee_baseline(examinee) -> bytes:
-    pic_path = os.path.join(current_app.config['UPLOAD_FOLDER'], examinee.picture)
-    with open(pic_path, 'rb') as f:
-        return f.read()
-
 
 def _get_examinee_or_error(examinee_id: int):
     examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
@@ -60,15 +40,9 @@ def _get_examinee_or_error(examinee_id: int):
     return examinee[0], None
 
 
-def _get_authenticated_examinee_or_error(user):
-    try:
-        examinee_id = int(user["uin"])
-    except (KeyError, TypeError, ValueError):
-        return None, None, utils.gen_error("Invalid MOSIP auth token", 401)
-
-    examinee, error = _get_examinee_or_error(examinee_id)
-    return examinee_id, examinee, error
-
+def _get_authenticated_examinee_or_error(uin: int):
+    examinee, error = _get_examinee_or_error(uin)
+    return examinee, error
 
 def _latest_picture_session(examinee_id: int):
     return (
@@ -98,11 +72,10 @@ class GetExaminee(Resource):
     def get(self, user):
         id = int(user['uin'])
 
-        print('what?')
         user = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
         if user is None:
             return utils.gen_error("Examinee does not exist", 404)
-        return utils.gen_success_message("returned examinee", user[0].to_dict())
+        return utils.gen_success_message("Returned examinee", user[0].to_dict())
     
     @api.expect(examinee_parser_creator)
     @api.doc(responses={400: "Missing parameters", 200: "Returns new user"})
@@ -172,78 +145,11 @@ class GetExaminee(Resource):
         db.session.commit()
         return utils.gen_success_message("deleted user", None)
 
-logtime_args = reqparse.RequestParser()
-logtime_args.add_argument('examinee_id', location='form', type=int, required=True)
-@api.route('/timein')
-class LogTimeIn(Resource):
-    @api.expect(logtime_args)
-    @api.doc(responses={404:"examinee does not exist", 200: "returns success"})
-    def post(self):
-        args = logtime_args.parse_args()
-
-        examinee_id = args.get('examinee_id')
-
-        examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
-        db.session.commit()
-
-        if examinee is None:
-            return utils.gen_error("Examinee does not exist", 404)
-        
-        log_entry = db.session.query(LogEntry).filter_by(examinee=examinee_id).order_by(LogEntry.log_id.desc()).first()
-
-        if log_entry:
-            log_entry.exam_time_in = datetime.now()
-
-        db.session.commit()
-
-        return utils.gen_success_message("examinee has timed in", 200)
-
-timeout_args = reqparse.RequestParser()
-timeout_args.add_argument('examinee_id', location='form', type=int, required=True)
-timeout_args.add_argument('exam_kit_id', type=int,location='form', required=True)
-@api.route('/timeout')
-class LogTimeOut(Resource):
-    @api.expect(timeout_args)
-    @api.doc(responses={404:"Examinee or Exam kit does not exist", 200: "returns success"})
-    def post(self):
-        args = timeout_args.parse_args()
-
-        examinee_id = args.get('examinee_id')
-        exam_kit_id = args.get('exam_kit_id')
-
-        examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
-        exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_kit_id)).first()
-        db.session.commit()
-
-        if examinee is None:
-            return utils.gen_error("Examinee does not exist", 404)
-        
-        if exam_kit is None:
-            return utils.gen_error("Exam kit does not exist", 404)
-
-        if examinee[0].id != exam_kit[0].examinee_id:
-            return utils.gen_error("Exam kit is not linked with examinee", 400)
-        
-        log_entry = db.session.query(LogEntry).filter_by(examinee=examinee_id).order_by(LogEntry.log_id.desc()).first()
-
-        if log_entry:
-            if log_entry.exam_time_in is None:
-                return utils.gen_error("Examinee has not timed in", 400)
-
-            log_entry.exam_time_out = datetime.now()
-
-        db.session.commit()
-
-        return utils.gen_success_message("examinee has timed out", 200)
-
-
 pretest_parser = reqparse.RequestParser()
 pretest_parser.add_argument('file', location='files', type=FileStorage, required=True)
+pretest_parser.add_argument('id', location='form', type=int, required=True)
 
-def check_face(examinee):
-    return True
-
-@api.route('/pretest')
+@api.route('/timein')
 class PreTestFace(Resource):
     method_decorators = [auth_required]
 
@@ -257,7 +163,8 @@ class PreTestFace(Resource):
         })
     def post(self, user):
         args = pretest_parser.parse_args()
-        examinee_id, examinee, error = _get_authenticated_examinee_or_error(user)
+        examinee_id = int(args.get('id'))
+        examinee, error = _get_authenticated_examinee_or_error(examinee_id)
         if error:
             return error
         pre_test_bytes = args.get('file').read()
@@ -273,7 +180,7 @@ class PreTestFace(Resource):
             baseline_bytes = f.read()
 
         try:
-            comparison = _compare_face_bytes(baseline_bytes, pre_test_bytes)
+            comparison = compare_faces(baseline_bytes, pre_test_bytes)
         except Exception as exc:
             return utils.gen_error("Face comparison failed", {
                 "allowed": False,
@@ -310,27 +217,13 @@ class PreTestFace(Resource):
         if not allowed:
             return utils.gen_error("Faces do not match", 403)
 
-        return utils.gen_success_message("Timein Success", {
-            "allowed": allowed,
-            "pre_conf": pre_conf,
-            "min_confidence": comparison["min_confidence"],
-            "distance": comparison["distance"],
-            "threshold": comparison["threshold"],
-            "deepface_verified": comparison["deepface_verified"],
-            "model": comparison["model"],
-            "detector_backend": comparison["detector_backend"],
-            "exam_time_in": log_entry.exam_time_in.isoformat() if log_entry and log_entry.exam_time_in else None,
-            "picture": picture.to_dict(),
-        })
+        return utils.gen_success_message("Timein Success", {})
 
-posttest_parser = reqparse.RequestParser()
-posttest_parser.add_argument('file', location='files', type=FileStorage, required=True)
-
-@api.route('/posttest')
+@api.route('/timeout')
 class PostTestFace(Resource):
     method_decorators = [auth_required]
 
-    @api.expect(posttest_parser)
+    @api.expect(pretest_parser)
     @api.doc(responses={
         400: "Missing image or no pre-test row",
         401: "Missing or invalid MOSIP auth",
@@ -339,8 +232,10 @@ class PostTestFace(Resource):
         200: "Face match"
     })
     def post(self, user):
-        args = posttest_parser.parse_args()
-        examinee_id, examinee, error = _get_authenticated_examinee_or_error(user)
+        args = pretest_parser.parse_args()
+        examinee_id = int(args.get('id'))
+        examinee, error = _get_authenticated_examinee_or_error(examinee_id)
+
         if error:
             return error
 
@@ -371,20 +266,8 @@ class PostTestFace(Resource):
         db.session.commit()
 
         allowed = comparison["match"]
-        post_conf = comparison["confidence"]
 
         if not allowed:
             return utils.gen_error("Faces do not match", 403)
 
-        return utils.gen_success_message("Timeout Success", {
-            "allowed": allowed,
-            "post_conf": post_conf,
-            "min_confidence": comparison["min_confidence"],
-            "distance": comparison["distance"],
-            "threshold": comparison["threshold"],
-            "deepface_verified": comparison["deepface_verified"],
-            "model": comparison["model"],
-            "detector_backend": comparison["detector_backend"],
-            "exam_time_out": log_entry.exam_time_out.isoformat() if log_entry and log_entry.exam_time_out else None,
-            "picture": picture.to_dict(),
-        })
+        return utils.gen_success_message("Timeout Success", {})
