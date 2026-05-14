@@ -81,7 +81,7 @@ class ExamUnlinker(Resource):
     def post(self):
         args = link_exam.parse_args()
 
-        exam_id = args.get('exam_id')
+        exam_id = int(args.get('exam_id'))
         exam_kit = db.session.execute(db.select(ExamKit).filter_by(kit_id=exam_id)).first()
        
         db.session.commit()
