@@ -6,9 +6,6 @@ const char* SSID     = "your_wifi";
 const char* PASSWORD = "your_password";
 const char* BASE_URL = "http://192.168.1.100:8000";  // your backend IP
 
-// JWT token stored after /mosip/auth
-String jwtToken = "";
-
 // Image buffer received from ESP32-CAM via Serial
 uint8_t* imageBuffer  = nullptr;
 size_t   imageSize    = 0;
@@ -27,84 +24,20 @@ void connectWiFi() {
   Serial.println("\nConnected: " + WiFi.localIP().toString());
 }
 
-// ── Helper: add auth cookie to request ───────────────────────────────────────
-void addAuth(HTTPClient& http) {
-  if (jwtToken.length() > 0) {
-    http.addHeader("Cookie", "token=" + jwtToken);
-  }
-}
-
-// ── Helper: extract JWT from Set-Cookie response header ──────────────────────
-void saveToken(HTTPClient& http) {
-  // response header looks like: Set-Cookie: token=<jwt>; ...
-  String cookie = http.header("Set-Cookie");
-  if (cookie.length() == 0) return;
-
-  int start = cookie.indexOf("token=");
-  if (start == -1) return;
-  start += 6;
-
-  int end = cookie.indexOf(";", start);
-  jwtToken = (end == -1) ? cookie.substring(start)
-                         : cookie.substring(start, end);
-  Serial.println("Token saved.");
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /mosip/auth
-// Inputs: uin (int), name (string)
-// Returns: 200 OK + sets JWT cookie | 403 auth failed | 502 MOSIP error
+// Inputs: string from scanner
+// Returns: 200 OK | 403 auth failed | 502 MOSIP error
 // ─────────────────────────────────────────────────────────────────────────────
-int mosipAuth(int uin, String name) {
+int mosipAuth(String qr_data) {
   HTTPClient http;
-  http.begin(wifiClient, String(BASE_URL) + "/mosip/auth");
+  http.begin(wifiClient, String(BASE_URL) + "/mosip/auth/enrolled");
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-  http.collectHeaders((const char*[]){"Set-Cookie"}, 1);  // capture cookie
 
-  String body = "uin=" + String(uin) + "&name=" + name;
+  String body = qr_data;
 
   int status = http.POST(body);
   Serial.println("[/mosip/auth] " + String(status));
-
-  if (status == 200) {
-    saveToken(http);
-  }
-
-  http.end();
-  return status;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /examinee/
-// Inputs: image file (from imageBuffer), uses JWT cookie for name+uin
-// Returns: 200 created | 400 bad input | 401 not authenticated
-// ─────────────────────────────────────────────────────────────────────────────
-int enrollExaminee() {
-  if (imageSize == 0) {
-    Serial.println("No image in buffer");
-    return -1;
-  }
-
-  HTTPClient http;
-  http.begin(wifiClient, String(BASE_URL) + "/examinee/");
-  addAuth(http);
-
-  String boundary = "----VTBoundary";
-  String head = "--" + boundary + "\r\n"
-                "Content-Disposition: form-data; name=\"file\"; filename=\"id.jpg\"\r\n"
-                "Content-Type: image/jpeg\r\n\r\n";
-  String tail = "\r\n--" + boundary + "--\r\n";
-
-  http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
-  http.addHeader("Content-Length", String(head.length() + imageSize + tail.length()));
-
-  WiFiClient* stream = http.getStreamPtr();
-  stream->print(head);
-  stream->write(imageBuffer, imageSize);
-  stream->print(tail);
-
-  int status = http.POST((uint8_t*)NULL, 0);
-  Serial.println("[/examinee/] " + String(status));
 
   http.end();
   return status;
@@ -112,15 +45,10 @@ int enrollExaminee() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /examinee/timein
-// Inputs: id (examinee int), image file (captured face from ESP32-CAM)
+// Inputs: image file (captured face from ESP32-CAM)
 // Returns: 200 face match | 403 face mismatch | 404 examinee not found
 // ─────────────────────────────────────────────────────────────────────────────
 int timeIn(int examineeId) {
-  if (imageSize == 0) {
-    Serial.println("No image in buffer");
-    return -1;
-  }
-
   HTTPClient http;
   http.begin(wifiClient, String(BASE_URL) + "/examinee/timein");
 
@@ -128,9 +56,6 @@ int timeIn(int examineeId) {
   String head = "--" + boundary + "\r\n"
                 "Content-Disposition: form-data; name=\"file\"; filename=\"face.jpg\"\r\n"
                 "Content-Type: image/jpeg\r\n\r\n";
-  String mid  = "\r\n--" + boundary + "\r\n"
-                "Content-Disposition: form-data; name=\"id\"\r\n\r\n" +
-                String(examineeId) + "\r\n";
   String tail = "--" + boundary + "--\r\n";
 
   http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
@@ -151,15 +76,10 @@ int timeIn(int examineeId) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /examinee/timeout
-// Inputs: id (examinee int), image file (captured face from ESP32-CAM)
+// Inputs: image file (captured face from ESP32-CAM)
 // Returns: 200 face match | 403 face mismatch | 404 examinee not found
 // ─────────────────────────────────────────────────────────────────────────────
 int timeOut(int examineeId) {
-  if (imageSize == 0) {
-    Serial.println("No image in buffer");
-    return -1;
-  }
-
   HTTPClient http;
   http.begin(wifiClient, String(BASE_URL) + "/examinee/timeout");
 
@@ -167,9 +87,6 @@ int timeOut(int examineeId) {
   String head = "--" + boundary + "\r\n"
                 "Content-Disposition: form-data; name=\"file\"; filename=\"face.jpg\"\r\n"
                 "Content-Type: image/jpeg\r\n\r\n";
-  String mid  = "\r\n--" + boundary + "\r\n"
-                "Content-Disposition: form-data; name=\"id\"\r\n\r\n" +
-                String(examineeId) + "\r\n";
   String tail = "--" + boundary + "--\r\n";
 
   http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
@@ -190,7 +107,7 @@ int timeOut(int examineeId) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /exam/link
-// Inputs: examinee (int), exam_id (int), uses JWT cookie
+// Inputs: exam_id string
 // Returns: 200 linked | 400 already linked / not found | 401 not authenticated
 // ─────────────────────────────────────────────────────────────────────────────
 int linkExam(int examineeId, int examKitId) {
@@ -199,7 +116,7 @@ int linkExam(int examineeId, int examKitId) {
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   addAuth(http);
 
-  String body = "examinee=" + String(examineeId) + "&exam_id=" + String(examKitId);
+  String body = "string exam kit";
 
   int status = http.POST(body);
   Serial.println("[/exam/link] " + String(status));
@@ -210,10 +127,9 @@ int linkExam(int examineeId, int examKitId) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /exam/submit
-// Inputs: examinee (int)
 // Returns: 200 submitted | 400 no linked kit
 // ─────────────────────────────────────────────────────────────────────────────
-int submitExam(int examineeId) {
+int submitExam() {
   HTTPClient http;
   http.begin(wifiClient, String(BASE_URL) + "/exam/submit");
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -225,49 +141,6 @@ int submitExam(int examineeId) {
 
   http.end();
   return status;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Receive image from ESP32-CAM over Serial
-// Protocol: CAM sends "IMG:<size>\n" → raw bytes → "END\n"
-// ─────────────────────────────────────────────────────────────────────────────
-bool receiveImageFromCam() {
-  // tell CAM to capture
-  Serial.println("CAPTURE");
-
-  // wait for "IMG:<size>\n"
-  String header = Serial.readStringUntil('\n');
-  header.trim();
-  if (!header.startsWith("IMG:")) {
-    Serial.println("Bad header: " + header);
-    return false;
-  }
-
-  imageSize = header.substring(4).toInt();
-  if (imageSize == 0 || imageSize > MAX_IMG_SIZE) {
-    Serial.println("Invalid size: " + String(imageSize));
-    return false;
-  }
-
-  // read raw bytes
-  size_t received = 0;
-  unsigned long timeout = millis() + 10000;
-  while (received < imageSize && millis() < timeout) {
-    if (Serial.available()) {
-      imageBuffer[received++] = Serial.read();
-    }
-  }
-
-  // consume "END\n"
-  Serial.readStringUntil('\n');
-
-  if (received != imageSize) {
-    Serial.printf("Incomplete image: %d / %d\n", received, imageSize);
-    return false;
-  }
-
-  Serial.printf("Image received: %d bytes\n", imageSize);
-  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
