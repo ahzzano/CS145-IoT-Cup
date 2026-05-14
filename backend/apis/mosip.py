@@ -49,11 +49,9 @@ def parse_national_id_qr(qr_data: str) -> tuple[str, str] | tuple[None, None]:
         return None, None
 
 # ── Parsers ──
-qr_parser = reqparse.RequestParser()
-qr_parser.add_argument(
-    "file", location="files", type=FileStorage, required=True,
-    help="Image of the National ID QR code"
-)
+uin_parser = reqparse.RequestParser()
+uin_parser.add_argument("uin", location="form", type=int, required=True)
+uin_parser.add_argument("name", location="form", type=str, required=True)
 
 # ── POST /mosip/auth ──
 def call_mosip_auth(uin, name, result, attempt):
@@ -64,7 +62,7 @@ def call_mosip_auth(uin, name, result, attempt):
 
     try:
         response = authenticator.auth(
-            individual_id=uin,
+            individual_id=str(uin),
             individual_id_type="UIN",
             demographic_data=demographics_data,
             consent=True,
@@ -72,12 +70,13 @@ def call_mosip_auth(uin, name, result, attempt):
         result['response'] = response
 
     except Exception as e:
+        print(e)
         result['error'] = 'unable to connect'
 
 
 @api.route("/auth")
 class Auth(Resource):
-    @api.expect(qr_parser)
+    @api.expect(uin_parser)
     @api.doc(responses={
         200: "Authenticated",
         400: "No QR code found or could not parse ID",
@@ -86,11 +85,7 @@ class Auth(Resource):
     })
     def post(self):
         """Yes/no identity verification — scans QR code from uploaded National ID image."""
-        args = qr_parser.parse_args()
-
-        qr_data = read_qr(args.get("file"))
-        if not qr_data:
-            return utils.gen_error("No QR code found in image", 400)
+        args = uin_parser.parse_args()
 
         if auth.bypassed():
             jwt_token       = generate_jwt({'uin': 1, 'name': 'bypasee'})
@@ -111,16 +106,12 @@ class Auth(Resource):
 
             return success_response
 
-        uin, name = parse_national_id_qr(qr_data)
+        uin = args.get('uin')
+        name = args.get('name')
         if not uin or not name:
             return utils.gen_error("Could not parse UIN and name from QR code", 400)
 
-        demographics_data = DemographicsModel(
-            name=[{"language": "eng", "value": name}],
-        )
-
         response = None
- 
         for attempt in range(1, MAX_RETRIES + 1):
             result = {}
             thread  = threading.Thread(
