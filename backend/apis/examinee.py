@@ -23,6 +23,8 @@ from facerec import compare_images
 import numpy as np
 from PIL import Image
 
+import queue
+
 import utils
 
 api = Namespace("examinee", description='All API endpoints for Examinees')
@@ -61,9 +63,42 @@ def _latest_log_entry(examinee_id: int):
         .first()
     )
 
+enrolled_parser = reqparse.RequestParser()
+enrolled_parser.add_argument('uin', location='args', type=int, required=True)
+
+task_queue = queue.Queue()
+
+@api.route('/enrolled/')
+class AddExamineeQueue(Resource):
+    @api.expect(enrolled_parser)
+    def get(self):
+        args = enrolled_parser.parse_args()
+
+        id = args.get('uin')
+        if not id:
+            return utils.gen_error("No UIN provided", 400)
+
+        user = db.session.execute(db.select(Examinee).filter_by(id=id)).first()
+
+        if user is None:
+            return utils.gen_error("Examinee does not exist", 403)
+        
+        task_queue.put(id)
+
+        return utils.gen_success_message("Examinee exists. Adding to queue", {})
+
+@api.route('/clear_queue/')
+class ClearExamineeQueue(Resource):
+    def get(self):
+        print('Clearing Queue')
+        while not task_queue.empty():
+            item = task_queue.get()
+            print(f'Item: {item}')
+
+        return utils.gen_success_message("Cleared queue", {})
+
 examinee_parser_creator = reqparse.RequestParser()
 examinee_parser_creator.add_argument('file', location='files', type=FileStorage, required=True)
-
 @api.route('/')
 class GetExaminee(Resource):
     method_decorators = [auth_required]
