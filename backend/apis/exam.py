@@ -34,14 +34,17 @@ class ExamLinker(Resource):
         db.session.commit()
 
         if examinee is None:
+            task_queue.put(examinee_id)
             return {"error": "examinee does not exist"}, 400
         
         if exam_kit is None:
+            task_queue.put(examinee_id)
             return {"error": "no more empty exam kits"}, 400
 
         ek = exam_kit[0]
 
         if ek.examinee_id != None:
+            task_queue.put(examinee_id)
             return {"error": "exam kit has already been linked"}, 400
 
         ek.examinee_id = examinee[0].id
@@ -104,6 +107,7 @@ class submit_exam(Resource):
         examinee_id = task_queue.get()
 
         if examinee_id is None:
+            task_queue.put(examinee_id)
             return utils.gen_error("Missing value \"examinee\"", 400)
 
         exam_kit = db.session.execute(
@@ -112,9 +116,11 @@ class submit_exam(Resource):
 
         db.session.commit()
         if exam_kit is None:
+            task_queue.put(examinee_id)
             return utils.gen_error("Examinee has no linked exam kit yet. Please link an exam kit first", 400)
         
         exam_kit[0].submitted = True
         db.session.commit()
 
+        task_queue.put(examinee_id)
         return utils.gen_success_message("Exam kit submitted", {})
