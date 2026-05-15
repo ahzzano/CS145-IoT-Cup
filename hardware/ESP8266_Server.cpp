@@ -332,7 +332,65 @@ void loop() {
             NationalID  = "";
         }
 
-        Serial.println("Exit mode: scanning test kit...");
+        Serial.println("Submission Mode");
+        switch (entryState) {
+            case IDLE:
+                delay(500);
+                ReadytoScanLED();
+                Serial.println("[Submission] Waiting for ID scan...");
+                entryState = SCANNING_ID;
+                break;
+
+            case SCANNING_ID: {
+                String id = ScanNationalID();
+                if (id.length() > 7) {
+                    NationalID = id;
+                    Serial.println("[Submission] ID captured: " + NationalID);
+                    delay(1000);
+                    entryState = SENDING_QR;
+                }
+                break;
+            }
+
+            case SENDING_QR: {
+                Serial.println("[Submission] Sending QR data...");
+                bool ok = sendQRData();
+                Serial.println(ok ? "[Submission] QR sent OK." : "[Submission] QR send FAILED.");
+                entryState = IDLE;  // For submission, we just go back to idle after sending QR
+                break;
+            }
+
+            case CAPTURING_IMAGE: {
+                Serial.println("[Submission] Capturing image...");
+                delay(5000);
+                FacialRecognitionLED();
+                bool success = fetchImage();
+                if (success) {
+                    printImageToSerial();
+                    entryState = SENDING_IMAGE;        // ← proceed to send
+                } else {
+                    Serial.println("[Submission] Image capture failed. Retrying...");
+                    // stays in CAPTURING_IMAGE to retry next loop
+                }
+                break;
+            }
+
+            case SENDING_IMAGE: {
+                Serial.println("[Submission] Sending image...");
+                bool ok = sendImageData();
+                Serial.println(ok ? "[Submission] Image sent OK." : "[Submission] Image send FAILED.");
+                entryState = DONE;  // For submission, we just go back to idle after sending image
+                break;
+            }
+
+            case DONE: {
+                Serial.println("[Submission] Process complete. Resetting state.");
+                entryState = IDLE;
+                NationalID  = "";
+                break;
+            }
+
         delay(5000);
+        }
     }
 }
