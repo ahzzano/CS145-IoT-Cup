@@ -28,44 +28,40 @@ String   NationalID   = "";
 // Non-blocking: called repeatedly from loop()
 // Returns scanned ID string, or "" if nothing yet
 String ScanNationalID() {
-    // if (Serial.available()) {
-    //     char cmd = Serial.read();
-    //     if (cmd == '1') {
-    //         if (!triggered) {
-    //             triggered = true;
-    //             scanner.write(TRIGGER_CMD, sizeof(TRIGGER_CMD));
-    //             Serial.println("[Scan triggered]");
-    //         }
-    //     } else if (cmd == '0') {
-    //         if (triggered) {
-    //             triggered = false;
-    //             while (scanner.available()) scanner.read();
-    //             Serial.println("[Scan stopped]");
-    //         }
-    //     } else if (cmd == 'r') {
-    //         jobDone    = false;
-    //         triggered  = false;
-    //         NationalID = "";
-    //         Serial.println("[System reset — ready for next scan]");
-    //     }
-    // }
+    static unsigned long lastTrigger = 0;
+    static unsigned long triggerSent = 0;
+    static bool          waiting     = false;
 
-    if (triggered && scanner.available()) {
-        String data = "";
-        unsigned long lastByte = millis();
-        while (millis() - lastByte < 150) {
-            if (scanner.available()) {
-                char c = scanner.read();
-                if (c >= 0x20 && c <= 0x7E) data += c;
-                lastByte = millis();
-            }
-        }
-        if (data.length() > 0) {
-            Serial.println("[ID Scanned]: " + data);
-            return data;
-        }
+    if (!waiting && millis() - lastTrigger > 500) {
+        while (scanner.available()) scanner.read(); // flush
+        scanner.write(TRIGGER_CMD, sizeof(TRIGGER_CMD));
+        triggerSent = millis();
+        lastTrigger = millis();
+        waiting     = true;
+        return "";
     }
 
+    if (waiting && millis() - triggerSent < 300) {
+        if (scanner.available()) {
+            String data = "";
+            unsigned long lastByte = millis();
+            while (millis() - lastByte < 150) {
+                if (scanner.available()) {
+                    char c = scanner.read();
+                    if (c >= 0x20 && c <= 0x7E) data += c;
+                    lastByte = millis();
+                }
+            }
+            waiting = false;
+            if (data.length() > 7) {
+                Serial.println("[ID Scanned]: " + data);
+                return data;
+            }
+        }
+        return "";
+    }
+
+    waiting = false; // timeout, try again next cycle
     return "";
 }
 
@@ -152,7 +148,71 @@ void setup() {
 
     server.begin();
     Serial.println("Server started.");
-    Serial.println("Send '1' to scan, '0' to stop, 'r' to reset.");
+    // Serial.println("Send '1' to scan, '0' to stop, 'r' to reset.");
+}
+
+String scanKit() {
+    // Simulate scanning a test kit (replace with actual scanner code)
+    delay(1000);
+    String testKitID = "TESTKIT12345";
+    Serial.println("Test kit scanned: " + testKitID);
+    return testKitID;
+}
+
+String secondScanID = "";
+bool   scannerActive = false;
+
+String ScanTestKit() {
+    static unsigned long lastTrigger = 0;
+    static unsigned long triggerSent = 0;
+    static bool          waiting     = false;
+
+    // First call — turn scanner ON
+    if (!scannerActive) {
+        Serial.println("[Second Scanner ON]");
+        while (scanner.available()) scanner.read(); // flush
+        scanner.write(TRIGGER_CMD, sizeof(TRIGGER_CMD));
+        scannerActive = true;
+        triggerSent   = millis();
+        lastTrigger   = millis();
+        waiting       = true;
+        return "";
+    }
+
+    if (waiting && millis() - triggerSent < 300) {
+        if (scanner.available()) {
+            String data = "";
+            unsigned long lastByte = millis();
+            while (millis() - lastByte < 150) {
+                if (scanner.available()) {
+                    char c = scanner.read();
+                    if (c >= 0x20 && c <= 0x7E) data += c;
+                    lastByte = millis();
+                }
+            }
+            waiting = false;
+            if (data.length() > 7) {
+                // Turn scanner OFF
+                Serial.println("[Second Scanner OFF]");
+                scannerActive = false;
+                Serial.println("[Second Scan]: " + data);
+                return data;
+            }
+        }
+        return "";
+    }
+
+    // Timeout — retrigger
+    if (waiting && millis() - triggerSent >= 300) {
+        waiting     = false;
+        lastTrigger = millis();
+        while (scanner.available()) scanner.read();
+        scanner.write(TRIGGER_CMD, sizeof(TRIGGER_CMD));
+        triggerSent = millis();
+        waiting     = true;
+    }
+
+    return "";
 }
 
 void loop() {
@@ -164,7 +224,8 @@ void loop() {
     NationalID = ScanNationalID();
 
     // Step 2 — Only proceed if ID was scanned
-    if (NationalID.length() > 0) {
+    if (NationalID.length() > 7) {
+        delay(1000);
         Serial.println("ID found, capturing image...");
 
         // Step 3 — Fetch image
@@ -175,6 +236,7 @@ void loop() {
             printImageToSerial();
         } else {
             Serial.println("Image capture failed.");
+
         }
 
         // Step 5 — Lock until reset
@@ -182,4 +244,6 @@ void loop() {
         triggered = false;
         Serial.println("[Job done — send 'r' to reset]");
     }
+
+    // Now, we will scan the test_kit
 }
