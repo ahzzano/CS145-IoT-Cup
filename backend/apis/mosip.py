@@ -84,6 +84,24 @@ def call_mosip_auth(uin, name, result, attempt):
         print(e)
         result['error'] = 'unable to connect'
 
+def call_mosip_kyc(uin, name, result, attempt):
+    print(f'KYC attempt {attempt}')
+    demographics_data = DemographicsModel(
+        name=[{"language": "eng", "value": name}],
+    )
+ 
+    try:
+        response = authenticator.kyc(
+            individual_id=str(uin),
+            individual_id_type="UIN",
+            demographic_data=demographics_data,
+            consent=True,
+        )
+        result['response'] = response
+ 
+    except Exception as e:
+        print(e)
+        result['error'] = 'unable to connect'
 
 @api.route("/auth")
 class Auth(Resource):
@@ -281,17 +299,29 @@ class KYC(Resource):
                 'uin': str(uin),
                 'photo_path': f'{uin}.jpg'
             })
-
-        demographics_data = DemographicsModel(
-            name=[{"language": "eng", "value": name}],
-        )
  
-        response = authenticator.kyc(
-            individual_id= str(uin),
-            individual_id_type="UIN",
-            demographic_data=demographics_data,
-            consent=True,
-        )
+        # ── MOSIP KYC (with retries) ──
+        response = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            result = {}
+            thread = threading.Thread(
+                target=call_mosip_kyc,
+                args=(uin, name, result, attempt)
+            )
+            thread.start()
+            thread.join(timeout=45)
+ 
+            if thread.is_alive():
+                if attempt == MAX_RETRIES:
+                    return utils.gen_error("MOSIP KYC Timed Out", 504)
+                time.sleep(1)
+                continue
+ 
+            if "error" in result:
+                return utils.gen_error("MOSIP KYC Failed", 502)
+ 
+            response = result.get('response')
+            break
  
         if not response.ok:
             return utils.gen_error("MOSIP KYC request failed", 502)
