@@ -35,12 +35,27 @@ def compare_faces(a: bytes, b: bytes) -> dict:
 
     return compare_images.compare_faces_2(a_img_pillow, b_img_pillow)
 
+def decode_input_image(args) -> bytes | None:
+    hex_data = args.get('hex_data')
+    file     = args.get('file')
+
+    if hex_data:
+        try:
+            cleaned = ''.join(hex_data.split())
+            return bytes.fromhex(cleaned)
+        except ValueError:
+            return None
+
+    if file:
+        return file.read() or None
+
+    return None
+
 def _get_examinee_or_error(examinee_id: int):
     examinee = db.session.execute(db.select(Examinee).filter_by(id=examinee_id)).first()
     if examinee is None:
         return None, utils.gen_error("Examinee does not exist", 404)
     return examinee[0], None
-
 
 def _get_authenticated_examinee_or_error(uin: int):
     examinee, error = _get_examinee_or_error(uin)
@@ -53,7 +68,6 @@ def _latest_picture_session(examinee_id: int):
         .order_by(ExamineePicture.id.desc())
         .first()
     )
-
 
 def _latest_log_entry(examinee_id: int):
     return (
@@ -181,7 +195,8 @@ class GetExaminee(Resource):
         return utils.gen_success_message("deleted user", None)
 
 pretest_parser = reqparse.RequestParser()
-pretest_parser.add_argument('file', location='files', type=FileStorage, required=True)
+pretest_parser.add_argument('file',     location='files', type=FileStorage, required=False)
+pretest_parser.add_argument('hex_data', location='form',  type=str,         required=False)
 @api.route('/timein')
 class PreTestFace(Resource):
     @api.expect(pretest_parser)
@@ -201,7 +216,7 @@ class PreTestFace(Resource):
         if error:
             task_queue.put(examinee_id)
             return error
-        pre_test_bytes = args.get('file').read()
+        pre_test_bytes = decode_input_image(args)
         if not pre_test_bytes:
             task_queue.put(examinee_id)
             return utils.gen_error("No pre-test image provided", 400)
@@ -272,7 +287,7 @@ class PostTestFace(Resource):
         args = pretest_parser.parse_args()
         if task_queue.empty():
             return utils.gen_error("No examinee in queue", 400)
-        examinee_id = int(task.queue.get())
+        examinee_id = int(task_queue.get())
         examinee, error = _get_authenticated_examinee_or_error(examinee_id)
 
         if error:
@@ -284,7 +299,7 @@ class PostTestFace(Resource):
             task_queue.put(examinee_id)
             return utils.gen_error("No pre-test session found for examinee", 400)
 
-        post_test_bytes = args.get('file').read()
+        post_test_bytes = decode_input_image(args)
         if not post_test_bytes:
             task_queue.put(examinee_id)
             return utils.gen_error("No post-test image provided", 400)
