@@ -42,11 +42,15 @@ def parse_national_id_qr(qr_data: str) -> tuple[str, str] | tuple[None, None]:
     Returns (uin, name) or (None, None) if parsing fails.
     """
     try:
-        payload = json.loads(qr_data)
+        match = re.search(r'\{.*\}', qr_data, re.DOTALL)
+        if not match:
+            return None, None
+
+        payload = json.loads(match.group())
         uin  = payload["uin"]
         name = payload["name"]
-        return uin, name
-    except (IndexError, AttributeError):
+        return str(uin), str(name)
+    except (json.JSONDecodeError, KeyError, TypeError):
         return None, None
 
 # ── Parsers ──
