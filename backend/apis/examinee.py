@@ -194,19 +194,22 @@ class PreTestFace(Resource):
         })
     def post(self):
         args = pretest_parser.parse_args()
-        if task_queue.empty():
+        if task_queue.empty():  
             return utils.gen_error("No examinee in queue", 400)
         examinee_id = int(task_queue.get())
         examinee, error = _get_authenticated_examinee_or_error(examinee_id)
         if error:
+            task_queue.put(examinee_id)
             return error
         pre_test_bytes = args.get('file').read()
         if not pre_test_bytes:
+            task_queue.put(examinee_id)
             return utils.gen_error("No pre-test image provided", 400)
 
         ## REPLACE STARTS HERE
         picture_path = os.path.join(current_app.config['UPLOAD_FOLDER'], examinee.picture)
         if not os.path.exists(picture_path):
+            task_queue.put(examinee_id)
             return utils.gen_error("ID picture does not exist", 400)
 
         with open(picture_path, "rb") as f:
@@ -215,6 +218,7 @@ class PreTestFace(Resource):
         try:
             comparison = compare_faces(baseline_bytes, pre_test_bytes)
         except Exception as exc:
+            task_queue.put(examinee_id)
             return utils.gen_error("Face comparison failed", {
                 "allowed": False,
                 "pre_conf": None,
@@ -248,8 +252,10 @@ class PreTestFace(Resource):
         pre_conf = comparison["confidence"]
 
         if not allowed:
+            task_queue.put(examinee_id)
             return utils.gen_error("Faces do not match", 403)
 
+        task_queue.put(examinee_id)
         return utils.gen_success_message("Timein Success", {})
 
 @api.route('/timeout')
@@ -270,18 +276,22 @@ class PostTestFace(Resource):
         examinee, error = _get_authenticated_examinee_or_error(examinee_id)
 
         if error:
+            task_queue.put(examinee_id)
             return error
 
         picture = _latest_picture_session(examinee.id)
         if picture is None:
+            task_queue.put(examinee_id)
             return utils.gen_error("No pre-test session found for examinee", 400)
 
         post_test_bytes = args.get('file').read()
         if not post_test_bytes:
+            task_queue.put(examinee_id)
             return utils.gen_error("No post-test image provided", 400)
 
         picture_path = os.path.join(current_app.config['UPLOAD_FOLDER'], examinee.picture)
         if not os.path.exists(picture_path):
+            task_queue.put(examinee_id)
             return utils.gen_error("ID picture does not exist", 400)
 
         with open(picture_path, "rb") as f:
@@ -301,6 +311,8 @@ class PostTestFace(Resource):
         allowed = comparison["match"]
 
         if not allowed:
+            task_queue.put(examinee_id)
             return utils.gen_error("Faces do not match", 403)
 
+        task_queue.put(examinee_id)
         return utils.gen_success_message("Timeout Success", {})

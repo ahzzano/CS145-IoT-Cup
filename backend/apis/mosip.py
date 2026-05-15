@@ -206,7 +206,7 @@ class Auth(Resource):
                 db.select(Examinee).filter_by(id=int(uin))
             ).first()
             if examinee is None:
-                return {}, 403
+                return {}, 200
             task_queue.put(int(uin))
             task_queue.put(int(uin))
             return {}, 200
@@ -272,9 +272,9 @@ class KYC(Resource):
 
         if auth.bypassed():
             return utils.gen_success_message("bypassed", {
-                'name': 'Charlie Kirk',
-                'uin': 271670,
-                'photo_path': 'we_are_charlie_kirk.jpg'
+                'name': name,
+                'uin': str(uin),
+                'photo_path': f'{uin}.jpg'
             })
 
         demographics_data = DemographicsModel(
