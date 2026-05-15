@@ -17,6 +17,7 @@ import utils
 import auth
 import threading
 import time
+import re
 
 api = Namespace("mosip", description="All MOSIP related requests")
 

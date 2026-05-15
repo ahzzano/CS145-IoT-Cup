@@ -5,7 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from flask import current_app
+from flask import current_app, request
 from flask_restx.errors import HTTPStatus
 from sqlalchemy import func
 from werkzeug.datastructures import FileStorage
@@ -38,6 +38,7 @@ def compare_faces(a: bytes, b: bytes) -> dict:
 def decode_input_image(args) -> bytes | None:
     hex_data = args.get('hex_data')
     file     = args.get('file')
+    raw_image = args.get('raw_image')
 
     if hex_data:
         try:
@@ -48,6 +49,9 @@ def decode_input_image(args) -> bytes | None:
 
     if file:
         return file.read() or None
+
+    if raw_image:
+        return raw_image
 
     return None
 
@@ -209,6 +213,8 @@ class PreTestFace(Resource):
         })
     def post(self):
         args = pretest_parser.parse_args()
+        if request.mimetype == 'image/jpeg':
+            args['raw_image'] = request.get_data() or None
         if task_queue.empty():  
             return utils.gen_error("No examinee in queue", 400)
         examinee_id = int(task_queue.get())
@@ -285,6 +291,8 @@ class PostTestFace(Resource):
     })
     def post(self):
         args = pretest_parser.parse_args()
+        if request.mimetype == 'image/jpeg':
+            args['raw_image'] = request.get_data() or None
         if task_queue.empty():
             return utils.gen_error("No examinee in queue", 400)
         examinee_id = int(task_queue.get())
