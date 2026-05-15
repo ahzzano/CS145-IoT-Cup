@@ -17,6 +17,7 @@ import utils
 import auth
 import threading
 import time
+import re
 
 api = Namespace("mosip", description="All MOSIP related requests")
 
@@ -42,11 +43,15 @@ def parse_national_id_qr(qr_data: str) -> tuple[str, str] | tuple[None, None]:
     Returns (uin, name) or (None, None) if parsing fails.
     """
     try:
-        payload = json.loads(qr_data)
+        match = re.search(r'\{.*\}', qr_data, re.DOTALL)
+        if not match:
+            return None, None
+
+        payload = json.loads(match.group())
         uin  = payload["uin"]
         name = payload["name"]
-        return uin, name
-    except (IndexError, AttributeError):
+        return str(uin), str(name)
+    except (json.JSONDecodeError, KeyError, TypeError):
         return None, None
 
 # ── Parsers ──
@@ -206,7 +211,7 @@ class Auth(Resource):
                 db.select(Examinee).filter_by(id=int(uin))
             ).first()
             if examinee is None:
-                return {}, 403
+                return {}, 200
             task_queue.put(int(uin))
             task_queue.put(int(uin))
             return {}, 200
@@ -272,9 +277,9 @@ class KYC(Resource):
 
         if auth.bypassed():
             return utils.gen_success_message("bypassed", {
-                'name': 'Charlie Kirk',
-                'uin': 271670,
-                'photo_path': 'we_are_charlie_kirk.jpg'
+                'name': name,
+                'uin': str(uin),
+                'photo_path': f'{uin}.jpg'
             })
 
         demographics_data = DemographicsModel(
