@@ -1,32 +1,46 @@
 #include <Servo.h>
 
-int pos = 0;
-int tact_input = 2; //This is the pin where we will get input from the tact switch
-int callback   = LOW;
+int pos        = 0;
+int signal     = 2; // This is input from the 8266 to tell us when to open the door.
+int callback   = 3; // This pin will tell the 8266 when the door is closed.
+int mode       = 4; // 0 -> dispenser, 1 -> submission mode
 
-Servo servo;
+Servo dispenserServo;
+Servo submissionServo;
 
 void setup()
 {
-  servo.attach(9, 500, 2500);
-  pinMode(tact_input, INPUT);
+  dispenserServo.attach(9,  500, 2500);
+  submissionServo.attach(11, 500, 2500);
+  pinMode(signal,   INPUT);
+  pinMode(mode,     INPUT);
+  pinMode(callback, OUTPUT);
 
-  servo.write(pos);
+  dispenserServo.write(pos);
+  submissionServo.write(pos);
   delay(500);
 }
 
 void loop()
 {
-  bool pressed = digitalRead(tact_input);
-  if (pressed){
-    Serial.print("pressed");
-    servo.write(90);
-    delay(2000);
-    servo.write(0);
-    digitalWrite(callback, HIGH);
+  bool open    = digitalRead(signal);
+  bool mode    = digitalRead(mode);
+  if (open) {
+    if (mode == 0) {
+      Serial.print("Dispensing Exam...");
+      dispenserServo.write(90);
       delay(2000);
+      dispenserServo.write(0);
+    } else {
+      Serial.print("Accepting Submission...");
+      submissionServo.write(90);
+      delay(2000);
+      submissionServo.write(0);
+    }
+    digitalWrite(callback, HIGH);
+    delay(2000);
+    digitalWrite(callback, LOW);
   }
-
-  digitalWrite(callback, LOW);
+  delay(500);
 }
 
