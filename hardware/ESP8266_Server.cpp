@@ -7,6 +7,10 @@
 #define SCANNER_RX      D5
 #define SCANNER_TX      D6
 #define MODE_ENTRY      D2
+#define ARDUINO_SIGNAL  D3
+#define FROM_ARDUINO    D4
+#define REDLED          D7
+#define BLUELED         D8
 
 // Wifi Credentials
 const char* ssid      = "s3wifi";
@@ -197,6 +201,20 @@ void printImageToSerial() {
     Serial.println("======================");
 }
 
+void ReadytoScanLED() {
+    digitalWrite(REDLED,   HIGH);
+}
+
+void FacialRecognitionLED() {
+    digitalWrite(REDLED,   LOW);
+    digitalWrite(BLUELED,  HIGH);
+}
+
+void dispensingLED() {
+    digitalWrite(REDLED,  LOW);
+    digitalWrite(BLUELED, LOW);
+}
+
 void setup() {
     Serial.begin(115200);
     scanner.begin(9600);
@@ -213,7 +231,11 @@ void setup() {
 
     server.begin();
     Serial.println("Server started.");
-    pinMode(MODE_ENTRY, INPUT);
+    pinMode(MODE_ENTRY,     INPUT);
+    pinMode(REDLED,         OUTPUT);
+    pinMode(BLUELED,        OUTPUT);
+    pinMode(ARDUINO_SIGNAL, OUTPUT);
+    pinMode(FROM_ARDUINO,   INPUT);
 }
 
 
@@ -227,6 +249,7 @@ void loop() {
 
             case IDLE:
                 delay(500);
+                ReadytoScanLED();
                 Serial.println("[Entry] Waiting for ID scan...");
                 entryState = SCANNING_ID;
                 break;
@@ -253,6 +276,7 @@ void loop() {
             case CAPTURING_IMAGE: {
                 Serial.println("[Entry] Capturing image...");
                 delay(5000);
+                FacialRecognitionLED();
                 bool success = fetchImage();
                 if (success) {
                     printImageToSerial();
@@ -289,7 +313,15 @@ void loop() {
             }
 
             case DONE:
-                // Locked — flip mode pin or power-cycle to reset
+                dispensingLED();
+                digitalWrite(ARDUINO_SIGNAL, HIGH);  // Signal Arduino to dispense item
+                // Now we need to wait for the Arduino to confirm it's done dispensing before we reset everything
+                bool dispensed = digitalRead(FROM_ARDUINO);
+                if (dispensed) {
+                    Serial.println("[Entry] Dispensing complete. Resetting state.");
+                    digitalWrite(ARDUINO_SIGNAL, LOW);   // Reset signal for next time
+                    entryState = IDLE;
+                }     
                 break;
         }
 
