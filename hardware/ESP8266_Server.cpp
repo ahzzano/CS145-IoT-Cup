@@ -7,8 +7,8 @@
 #define SCANNER_RX      D5
 #define SCANNER_TX      D6
 #define MODE_ENTRY      D2
-#define ARDUINO_SIGNAL  D3
-#define FROM_ARDUINO    D4
+#define ARDUINO_SIGNAL  D0
+#define FROM_ARDUINO    D1
 #define REDLED          D7
 #define BLUELED         D8
 
@@ -19,8 +19,8 @@ const char* password  = "Com9L3x!";
 const char* esp32IP   = "192.168.60.236";
 const int   esp32Port = 8080;
 
-const char* serverIP  = "192.168.60.63";
-const int   serverPort = 8000;
+const char* serverIP  = "https://veritest.duckdns.org";
+// const int   serverPort = 8000;
 
 const byte  TRIGGER_CMD[] = {0x7E, 0x00, 0x08, 0x01, 0x00, 0x02, 0x01, 0xAB, 0xCD};
 
@@ -37,6 +37,8 @@ int      mode         = 0;
 const char* examKitNumbers[] = {"KIT001", "KIT002", "KIT003"};
 int        currentKitIndex = -1;
 
+bool submissionMode = false;
+
 enum EntryState {
     IDLE,
     SCANNING_ID,
@@ -45,6 +47,7 @@ enum EntryState {
     SENDING_IMAGE,    
     SCANNING_KIT,
     SENDING_KIT,     
+    WAITING_ARD,     // For submission mode, we wait for Arduino confirmation after sending data
     DONE
 };
 
@@ -53,7 +56,7 @@ EntryState entryState = IDLE;
 // ── Send QR / National ID ─────────────────────────────
 bool sendQRData() {
     HTTPClient http;
-    String url = "http://" + String(serverIP) + ":" + String(serverPort) + "/mosip/auth/enrolled";
+    String url = String(serverIP) + "/mosip/auth/enrolled";
 
     Serial.println("[POST] Sending QR data to " + url);
     http.begin(wifiClient, url);
@@ -69,7 +72,26 @@ bool sendQRData() {
     return (httpCode == HTTP_CODE_OK || httpCode == 201);
 }
 
-// ── Send Image ────────────────────────────────────────
+// ── Send QR / National ID on Exit ─────────────────────────────
+bool sendQRDataTimeOut() {
+    HTTPClient http;
+    String url = String(serverIP) + "/exam/submit";
+
+    Serial.println("[POST] Sending QR data to " + url);
+    http.begin(wifiClient, url);
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    String payload = "";
+    int httpCode = http.POST(payload);
+
+    Serial.printf("[POST QR] Response code: %d\n", httpCode);
+    if (httpCode > 0) Serial.println("[POST QR] Response: " + http.getString());
+
+    http.end();
+    return (httpCode == HTTP_CODE_OK || httpCode == 201);
+}
+
+// ── Send Image Upon Entry ────────────────────────────────────────
 bool sendImageData() {
     if (imageBuffer == nullptr || imageSize == 0) {
         Serial.println("[POST Image] No image in buffer.");
@@ -77,7 +99,31 @@ bool sendImageData() {
     }
 
     HTTPClient http;
-    String url = "http://" + String(serverIP) + ":" + String(serverPort) + "/examinee/timein";
+    String url = String(serverIP) + "/examinee/timein";
+
+    Serial.println("[POST] Sending image to " + url);
+    http.begin(wifiClient, url);
+    http.addHeader("Content-Type", "image/jpeg");
+    // http.addHeader("X-National-ID", NationalID);   // attach ID as a header for reference
+
+    int httpCode = http.POST(imageBuffer, imageSize);
+
+    Serial.printf("[POST Image] Response code: %d\n", httpCode);
+    if (httpCode > 0) Serial.println("[POST Image] Response: " + http.getString());
+
+    http.end();
+    return (httpCode == HTTP_CODE_OK || httpCode == 201);
+}
+
+// ── Send Image Upon Exit ────────────────────────────────────────
+bool sendImageDataTimeOut() {
+    if (imageBuffer == nullptr || imageSize == 0) {
+        Serial.println("[POST Image] No image in buffer.");
+        return false;
+    }
+
+    HTTPClient http;
+    String url = String(serverIP) + "/examinee/timeout";
 
     Serial.println("[POST] Sending image to " + url);
     http.begin(wifiClient, url);
@@ -144,13 +190,13 @@ bool scanExamKit() {
 // ── Send Kit Data ──────────────────────────────────
 bool sendKitData() {
     HTTPClient http;
-    String url = "http://" + String(serverIP) + ":" + String(serverPort) + "/examinee/kit"; // CHANGE THIS LATER!
+    String url = String(serverIP) + "/exam/link";
 
     Serial.println("[POST] Sending kit data to " + url);
     http.begin(wifiClient, url);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    String payload = "kit_number=" + String(examKitNumbers[currentKitIndex]);
+    String payload = "exam_id=" + String(examKitNumbers[currentKitIndex]);
     int httpCode = http.POST(payload);
     http.end();
     return (httpCode == HTTP_CODE_OK || httpCode == 201);
@@ -244,6 +290,15 @@ void loop() {
 
     mode = digitalRead(MODE_ENTRY);
 
+    if (submissionMode) {
+        if (mode == LOW) {
+            Serial.println("[Mode Switch] Detected mode switch back to Entry. Resetting state.");
+            submissionMode = false;
+            entryState = IDLE;
+            NationalID  = "";
+        }
+    }
+
     if (mode == LOW) {
         switch (entryState) {
 
@@ -260,7 +315,7 @@ void loop() {
                     NationalID = id;
                     Serial.println("[Entry] ID captured: " + NationalID);
                     delay(1000);
-                    entryState = SENDING_QR;
+                    entryState = SENDING_QR;  // For entry, we wait for Arduino confirmation before proceeding to send QR and image
                 }
                 break;
             }
@@ -269,7 +324,11 @@ void loop() {
                 Serial.println("[Entry] Sending QR data...");
                 bool ok = sendQRData();
                 Serial.println(ok ? "[Entry] QR sent OK." : "[Entry] QR send FAILED.");
-                entryState = CAPTURING_IMAGE;         // ← proceed regardless, or gate on ok
+                if (!ok) {
+                    entryState = SCANNING_ID;
+                } else {
+                    entryState = CAPTURING_IMAGE;
+                }        
                 break;
             }
 
@@ -292,7 +351,11 @@ void loop() {
                 Serial.println("[Entry] Sending image...");
                 bool ok = sendImageData();
                 Serial.println(ok ? "[Entry] Image sent OK." : "[Entry] Image send FAILED.");
-                entryState = SCANNING_KIT;  // ← proceed regardless, or gate on ok
+                if (!ok) {
+                    entryState = SCANNING_ID;  // If sending image fails, we go back to scanning ID to restart the process
+                } else {
+                    entryState = SCANNING_KIT;  // If image sent successfully, we proceed to scan the kit without waiting for Arduino confirmation (since it's part of the entry process)
+                }
                 break;
             }
 
@@ -308,31 +371,43 @@ void loop() {
                 Serial.println("[Entry] Sending kit data...");
                 bool ok = sendKitData();
                 Serial.println(ok ? "[Entry] Kit data sent OK." : "[Entry] Kit data send FAILED.");
-                entryState = DONE;
+                entryState = WAITING_ARD;  // For entry, we wait for Arduino confirmation before resetting, so we go to WAITING_ARD
                 break;
             }
 
-            case DONE:
+            case WAITING_ARD: {
+                Serial.println("[Submission] Process complete. Resetting state.");
                 dispensingLED();
-                digitalWrite(ARDUINO_SIGNAL, HIGH);  // Signal Arduino to dispense item
-                // Now we need to wait for the Arduino to confirm it's done dispensing before we reset everything
-                bool dispensed = digitalRead(FROM_ARDUINO);
-                if (dispensed) {
-                    Serial.println("[Entry] Dispensing complete. Resetting state.");
-                    digitalWrite(ARDUINO_SIGNAL, LOW);   // Reset signal for next time
-                    entryState = IDLE;
-                }     
+                digitalWrite(ARDUINO_SIGNAL, HIGH);
+                entryState = DONE;
                 break;
+            }
+            
+            case DONE: {
+                bool submit = digitalRead(FROM_ARDUINO);
+                if (submit) {
+                    Serial.println("[Submission] Submission confirmed by Arduino.");
+                    entryState = IDLE;
+                    digitalWrite(ARDUINO_SIGNAL, LOW);
+                    NationalID  = "";
+                }
+                break;
+            }
         }
 
     } else {
-        if (entryState != IDLE) {
-            Serial.println("[Reset] Exit mode — resetting entry state.");
+
+        if (entryState != IDLE && !submissionMode) {
+            Serial.println("[Mode Switch] Detected mode switch. Resetting state.");
             entryState = IDLE;
             NationalID  = "";
         }
+            
+        if (!submissionMode) {
+            Serial.println("Switching to Submission Mode...");
+            submissionMode = true;
+        }
 
-        Serial.println("Submission Mode");
         switch (entryState) {
             case IDLE:
                 delay(500);
@@ -356,7 +431,7 @@ void loop() {
                 Serial.println("[Submission] Sending QR data...");
                 bool ok = sendQRData();
                 Serial.println(ok ? "[Submission] QR sent OK." : "[Submission] QR send FAILED.");
-                entryState = IDLE;  // For submission, we just go back to idle after sending QR
+                entryState = CAPTURING_IMAGE;  // For submission, we just go back to idle after sending QR
                 break;
             }
 
@@ -377,16 +452,28 @@ void loop() {
 
             case SENDING_IMAGE: {
                 Serial.println("[Submission] Sending image...");
-                bool ok = sendImageData();
+                bool ok = sendImageDataTimeOut();
                 Serial.println(ok ? "[Submission] Image sent OK." : "[Submission] Image send FAILED.");
-                entryState = DONE;  // For submission, we just go back to idle after sending image
+                entryState = WAITING_ARD;  // For submission, we just go back to idle after sending image
                 break;
             }
 
-            case DONE: {
+            case WAITING_ARD: {
                 Serial.println("[Submission] Process complete. Resetting state.");
-                entryState = IDLE;
-                NationalID  = "";
+                dispensingLED();
+                digitalWrite(ARDUINO_SIGNAL, HIGH);
+                entryState = DONE;
+                break;
+            }
+            
+            case DONE: {
+                bool submit = digitalRead(FROM_ARDUINO);
+                if (submit) {
+                    Serial.println("[Submission] Submission confirmed by Arduino.");
+                    
+                    entryState = IDLE;
+                    NationalID  = "";
+                }
                 break;
             }
 
