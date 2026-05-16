@@ -1,6 +1,6 @@
 // const DEFAULT_API_BASE_URL = '/api';
 // const DEFAULT_API_BASE_URL = 'http://localhost:8000'
-const DEFAULT_API_BASE_URL = 'https://13.214.144.32:8000'
+const DEFAULT_API_BASE_URL = 'https://veritest.duckdns.org'
 /**
  * @typedef {{ success: true; message: string; examinee_id: string }} EnrollmentSuccess
  * @typedef {{ success: false; error: string }} EnrollmentError
