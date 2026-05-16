@@ -1,5 +1,4 @@
 #include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
 #include <WiFiClient.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
@@ -20,15 +19,14 @@ const char* password  = "Com9L3x!";
 const char* esp32IP   = "192.168.60.236";
 const int   esp32Port = 8080;
 
-const char* serverIP  = "https://veritest.duckdns.org";
-// const int   serverPort = 8000;
+const char* serverIP  = "13.214.144.32";
+const int   serverPort = 8000;
 
 const byte  TRIGGER_CMD[] = {0x7E, 0x00, 0x08, 0x01, 0x00, 0x02, 0x01, 0xAB, 0xCD};
 
-WiFiClientSecure         wifiClientSecure;
-WiFiClient               wifiClient;
-ESP8266WebServer         server(80);
-SoftwareSerial           scanner(SCANNER_RX, SCANNER_TX);
+WiFiClient         wifiClient;
+ESP8266WebServer   server(80);
+SoftwareSerial     scanner(SCANNER_RX, SCANNER_TX);
 
 uint8_t* imageBuffer  = nullptr;
 size_t   imageSize    = 0;
@@ -58,7 +56,7 @@ EntryState entryState = IDLE;
 // ── Send QR / National ID ─────────────────────────────
 bool sendQRData() {
     HTTPClient http;
-    String url = String(serverIP) + "/mosip/auth/enrolled";
+    String url = "http://" + String(serverIP) + ":" + String(serverPort) + "/mosip/auth/enrolled";
 
     Serial.println("[POST] Sending QR data to " + url);
     http.begin(wifiClient, url);
@@ -77,7 +75,7 @@ bool sendQRData() {
 // ── Send QR / National ID on Exit ─────────────────────────────
 bool sendQRDataTimeOut() {
     HTTPClient http;
-    String url = String(serverIP) + "/exam/submit";
+    String url = "http://" + String(serverIP) + ":" + String(serverPort) + "/mosip/auth/enrolled";
 
     Serial.println("[POST] Sending QR data to " + url);
     http.begin(wifiClient, url);
@@ -101,7 +99,7 @@ bool sendImageData() {
     }
 
     HTTPClient http;
-    String url = String(serverIP) + "/examinee/timein";
+    String url = "http://" + String(serverIP) + ":" + String(serverPort) + "/examinee/timein";
 
     Serial.println("[POST] Sending image to " + url);
     http.begin(wifiClient, url);
@@ -125,7 +123,7 @@ bool sendImageDataTimeOut() {
     }
 
     HTTPClient http;
-    String url = String(serverIP) + "/examinee/timeout";
+    String url = "http://" + String(serverIP) + ":" + String(serverPort) + "/examinee/timeout";
 
     Serial.println("[POST] Sending image to " + url);
     http.begin(wifiClient, url);
@@ -192,7 +190,7 @@ bool scanExamKit() {
 // ── Send Kit Data ──────────────────────────────────
 bool sendKitData() {
     HTTPClient http;
-    String url = String(serverIP) + "/exam/link";
+    String url = "http://" + String(serverIP) + ":" + String(serverPort) + "/exam/link";
 
     Serial.println("[POST] Sending kit data to " + url);
     http.begin(wifiClient, url);
@@ -276,7 +274,6 @@ void setup() {
     Serial.print("Connecting to WiFi");
     while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
     Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
-    wifiClientSecure.setInsecure();
 
     server.begin();
     Serial.println("Server started.");
@@ -293,16 +290,16 @@ void loop() {
 
     mode = digitalRead(MODE_ENTRY);
 
-    if (submissionMode) {
-        if (mode == LOW) {
-            Serial.println("[Mode Switch] Detected mode switch back to Entry. Resetting state.");
-            submissionMode = false;
-            entryState = IDLE;
-            NationalID  = "";
-        }
-    }
+    // if (submissionMode) {
+    //     if (mode == LOW) {
+    //         Serial.println("[Mode Switch] Detected mode switch back to Entry. Resetting state.");
+    //         submissionMode = false;
+    //         entryState = IDLE;
+    //         NationalID  = "";
+    //     }
+    // }
 
-    if (mode == LOW) {
+    if (submissionMode &&mode == LOW) {
         switch (entryState) {
 
             case IDLE:
@@ -359,6 +356,7 @@ void loop() {
                 } else {
                     entryState = SCANNING_KIT;  // If image sent successfully, we proceed to scan the kit without waiting for Arduino confirmation (since it's part of the entry process)
                 }
+                entryState = SCANNING_KIT; // REMOVE THIS!
                 break;
             }
 
