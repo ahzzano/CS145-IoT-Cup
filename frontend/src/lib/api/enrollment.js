@@ -100,8 +100,7 @@ export async function enrollExaminee(qrImage) {
 
     let picture_blob = await getExamineeImage(examinee_picture)
     if (!picture_blob) {
-        console.log(PUBLIC_BYPASS)
-        if(!PUBLIC_BYPASS) {
+        if(PUBLIC_BYPASS == 'true') {
             const picture = await fetch('/271670.jpg')
             picture_blob = await picture.blob()
         } else {
