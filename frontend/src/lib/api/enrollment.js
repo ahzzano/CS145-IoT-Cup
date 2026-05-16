@@ -1,4 +1,4 @@
-import { BYPASS } from '$env/static/public'
+import { PUBLIC_BYPASS } from '$env/static/public'
 // const DEFAULT_API_BASE_URL = '/api';
 // const DEFAULT_API_BASE_URL = 'http://localhost:8000'
 const DEFAULT_API_BASE_URL = 'https://veritest.duckdns.org'
@@ -100,7 +100,7 @@ export async function enrollExaminee(qrImage) {
 
     let picture_blob = await getExamineeImage(examinee_picture)
     if (!picture_blob) {
-        if(!BYPASS) {
+        if(!PUBLIC_BYPASS) {
             const picture = await fetch('/271670.jpg')
             picture_blob = await picture.blob()
         } else {
