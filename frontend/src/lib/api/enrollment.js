@@ -95,7 +95,7 @@ export async function enrollExaminee(qrImage) {
     const examinee_picture = kyc_json.data.photo_path
     const examinee_name = kyc_json.data.name
 
-    const examinee_picture_fname = examinee_picture.split("/")[1]
+    let examinee_picture_fname = examinee_picture.split("/")[1]
     console.log(examinee_picture_fname)
 
     let picture_blob = await getExamineeImage(examinee_picture)
@@ -103,6 +103,7 @@ export async function enrollExaminee(qrImage) {
         if(PUBLIC_BYPASS == 'true') {
             const picture = await fetch('/271670.jpg')
             picture_blob = await picture.blob()
+            examinee_picture_fname = '271670.jpg'
         } else {
             return {
                 success: false,
