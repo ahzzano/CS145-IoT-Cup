@@ -1,4 +1,5 @@
 #include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WiFiClient.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
@@ -24,9 +25,10 @@ const char* serverIP  = "https://veritest.duckdns.org";
 
 const byte  TRIGGER_CMD[] = {0x7E, 0x00, 0x08, 0x01, 0x00, 0x02, 0x01, 0xAB, 0xCD};
 
-WiFiClient         wifiClient;
-ESP8266WebServer   server(80);
-SoftwareSerial     scanner(SCANNER_RX, SCANNER_TX);
+WiFiClientSecure         wifiClientSecure;
+WiFiClient               wifiClient;
+ESP8266WebServer         server(80);
+SoftwareSerial           scanner(SCANNER_RX, SCANNER_TX);
 
 uint8_t* imageBuffer  = nullptr;
 size_t   imageSize    = 0;
@@ -274,6 +276,7 @@ void setup() {
     Serial.print("Connecting to WiFi");
     while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
     Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
+    wifiClientSecure.setInsecure();
 
     server.begin();
     Serial.println("Server started.");

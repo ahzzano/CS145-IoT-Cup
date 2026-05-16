@@ -1,7 +1,7 @@
 #include <Servo.h>
 
 int pos        = 0;
-int signal     = 2; // This is input from the 8266 to tell us when to open the door.
+int signal     = 2; // CONNCT TO D0. This is input from the 8266 to tell us when to open the door.
 int callback   = 3; // This pin will tell the 8266 when the door is closed.
 int mode       = 4; // 0 -> dispenser, 1 -> submission mode
 
