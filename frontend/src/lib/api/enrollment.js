@@ -1,4 +1,4 @@
-import { BYPASS } from '$env/static/private'
+import { BYPASS } from '$env/static/public'
 // const DEFAULT_API_BASE_URL = '/api';
 // const DEFAULT_API_BASE_URL = 'http://localhost:8000'
 const DEFAULT_API_BASE_URL = 'https://veritest.duckdns.org'
