@@ -142,7 +142,7 @@ export async function enrollExaminee(qrImage) {
     }
 
     console.log('kyc-ing...')
-    const kyc = await getKycData()
+    const kyc = await getKycData(examinee_id, examinee_name)
     if (kyc.error) {
         return {
             success: false,
