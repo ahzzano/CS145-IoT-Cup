@@ -15,7 +15,7 @@ const DEFAULT_API_BASE_URL = PUBLIC_DEFAULT_API_BASE_URL
  */
 async function getExamineeImage(img_path) {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
-    console.log(`${apiBaseUrl}/${img_path}`)
+    console.log(`${apiBaseUrl}/serve/${img_path}`)
     const response = await fetch(`${apiBaseUrl}/serve/${img_path}`, {
         credentials: 'include'
     })
@@ -62,7 +62,7 @@ async function getKycData(examinee_uin, examinee_name) {
     const name= kyc_json.data.name
     const uin = kyc_json.data.uin
 
-    let examinee_picture_fname = pic.split("/")[1]
+    let examinee_picture_fname = pic
     console.log(examinee_picture_fname)
 
     let picture_blob = await getExamineeImage(pic)
