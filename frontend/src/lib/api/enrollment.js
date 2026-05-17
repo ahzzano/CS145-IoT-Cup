@@ -60,7 +60,7 @@ async function getKycData(examinee_uin, examinee_name) {
 
     const pic = kyc_json.data.photo_path
     const name= kyc_json.data.name
-    const uin = kyc_json.uin
+    const uin = kyc_json.data.uin
 
     let examinee_picture_fname = pic.split("/")[1]
     console.log(examinee_picture_fname)
