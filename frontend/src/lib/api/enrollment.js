@@ -62,7 +62,7 @@ async function getKycData(examinee_uin, examinee_name) {
     const name= kyc_json.data.name
     const uin = kyc_json.data.uin
 
-    let examinee_picture_fname = pic
+    let examinee_picture_fname = pic.replace('serve/', '')
     console.log(examinee_picture_fname)
 
     let picture_blob = await getExamineeImage(pic)
