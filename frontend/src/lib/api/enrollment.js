@@ -105,6 +105,7 @@ export async function enrollExaminee(qrImage) {
             const picture = await fetch(`${DEFAULT_API_BASE_URL}/serve/${examinee_uin}.jpg`)
             picture_blob = await picture.blob()
             examinee_picture_fname = `${examinee_uin}.jpg`
+            console.log(examinee_picture_fname)
         } else {
             return {
                 success: false,
