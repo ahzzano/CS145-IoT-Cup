@@ -312,15 +312,12 @@ class PostTestFace(Resource):
             task_queue.put(examinee_id)
             return utils.gen_error("No post-test image provided", 400)
 
-        picture_path = os.path.join(current_app.config['UPLOAD_FOLDER'], examinee.picture)
-        if not os.path.exists(picture_path):
+        pre_test_bytes = picture.pre_test
+        if not pre_test_bytes:
             task_queue.put(examinee_id)
-            return utils.gen_error("ID picture does not exist", 400)
+            return utils.gen_error("No pre-test image found for examinee", 400)
 
-        with open(picture_path, "rb") as f:
-            baseline_bytes = f.read()
-
-        comparison = compare_faces(baseline_bytes, post_test_bytes)
+        comparison = compare_faces(pre_test_bytes, post_test_bytes)
 
         picture.post_test = post_test_bytes
         picture.post_conf = comparison["confidence"]
