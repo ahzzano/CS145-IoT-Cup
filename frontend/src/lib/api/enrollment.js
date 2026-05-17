@@ -112,6 +112,7 @@ export async function enrollExaminee(qrImage) {
     }
 
     const examinee_id = auth_json.data.uin
+    console.log(examinee_id)
     const examinee_name = auth_json.data.name
 
     const existing_examinee_response = await fetch(
