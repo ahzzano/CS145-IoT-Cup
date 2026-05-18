@@ -15,8 +15,8 @@ const DEFAULT_API_BASE_URL = PUBLIC_DEFAULT_API_BASE_URL
  */
 async function getExamineeImage(img_path) {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
-    console.log(`${apiBaseUrl}/serve/${img_path}`)
-    const response = await fetch(`${apiBaseUrl}/serve/${img_path}`, {
+    console.log(`${apiBaseUrl}/${img_path}`)
+    const response = await fetch(`${apiBaseUrl}/${img_path}`, {
         credentials: 'include'
     })
 
